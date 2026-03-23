@@ -10,6 +10,8 @@ Orchestrate wave-based execution of epic tasks using a persistent team of worker
 
 **You are the orchestrator. You do NOT write code or fix issues directly.** Your job is to read state, manage the team, sync tasks, update bd, and manage GitHub. All implementation work — including gate fixes, test failures, and verification issues — MUST be delegated to a teammate or subagent. This keeps the orchestrator context clean and focused on coordination.
 
+**When `unattended: true`, NEVER pause to ask the user what to do next.** If the context-sufficiency check passes and context usage is below 70%, auto-continue to the next phase. This means: after decomposition → auto-build, after epic complete → auto-plan next epic, after all epics done → auto-ship. Do NOT say "Run /epic-build" or "Want me to continue?" — just do it. The only reasons to pause are: context insufficient (needs human creative input), context usage ≥70% (write handoff), or ESCALATE.
+
 ## Context Health
 
 Between waves, check actual context usage to decide whether to continue or hand off:
@@ -714,8 +716,12 @@ When all child tasks for the current epic are closed and the review passes:
    ```bash
    bd children {milestone_bd_id} --json
    ```
-   - If open epics remain → auto-invoke `/epic-plan` to capture next epic
-   - If none remaining → report "All epics complete. Review the built software, then run `/epic-ship` when satisfied."
+   - If open epics remain:
+     - If `unattended: true` → **auto-invoke `/epic-plan`** immediately to capture and decompose the next epic. Do NOT ask "Want me to continue?" or say "Run /epic-plan" — just proceed. Check context usage first; if ≥70%, write handoff instead.
+     - If `unattended: false` → suggest `/epic-plan` to capture the next epic
+   - If no open epics remain:
+     - If `unattended: true` → **auto-invoke `/epic-ship`** to ship the milestone. Do NOT ask — just proceed.
+     - If `unattended: false` → report "All epics complete. Run `/epic-ship` when ready."
 
 ## Discovered Work Triage
 

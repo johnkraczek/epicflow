@@ -8,6 +8,8 @@ Ships a completed milestone — creates a single PR for all epic work, merges to
 
 This runs after ALL epics in the milestone are complete (not per-epic).
 
+**When `unattended: true`, auto-proceed through all phases where context is sufficient.** Do NOT pause between validation, retrospective, PR creation, and merge. The only pause points are: acceptance criteria failures where tests fail, and CI failures that aren't clearly test/lint issues.
+
 ## Settings
 
 Read `.epic/settings.json` (if it exists):

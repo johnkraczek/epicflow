@@ -6,6 +6,8 @@ description: "EpicFlow — Plan epics: requirements, milestones, decomposition"
 
 This command handles the full planning lifecycle. It detects where you are and routes to the right phase.
 
+**When `unattended: true`, auto-proceed through every phase transition where context is sufficient.** Do NOT pause to ask "Want me to continue?" or say "Run /epic-build". If the plan is decomposed and validated, immediately start building. If an epic is captured and briefed, immediately decompose. The only phases that pause are: Requirements Gathering (always needs human), Epic Capture with insufficient detail (needs human briefing), and plan validation failures after 2 iterations.
+
 ## Settings
 
 Read `.epic/settings.json` for configuration (if it exists):
@@ -51,7 +53,7 @@ Route to the first matching phase:
 | Roadmap exists, no milestone | **Publish Milestone** |
 | Milestone exists, no active epic | **Epic Capture** |
 | Active epic, no tasks | **Decompose** |
-| Active epic with tasks | Report "already planned" → suggest `/epic-build` |
+| Active epic with tasks | If `unattended: true` → **auto-invoke `/epic-build`** (context sufficient: tasks exist and are ready). If `unattended: false` → suggest `/epic-build` |
 
 ---
 
@@ -265,6 +267,14 @@ The **Parent Context** section is critical — it carries the "why" from the mil
     *Posted by EpicFlow agent*
     EOF
     ```
+
+### Auto-Continue After Decomposition
+
+When decomposition is complete (plan validation APPROVED, tasks created, GitHub synced):
+
+- If `unattended: true` → check context usage, then **auto-invoke `/epic-build`** immediately. Do NOT say "Run /epic-build" and wait — just continue. The plan is done, tasks are ready, there is nothing to ask about.
+- If `unattended: false` → present the task table and suggest `/epic-build`
+- If in mobile mode → send `epic-notify.sh --mobile-only 3 "Decomposition Done" "{epic}: {count} tasks. Starting build..."` before auto-continuing
 
 ### Cross-Epic Dependencies
 
