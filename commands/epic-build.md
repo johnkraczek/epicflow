@@ -18,6 +18,22 @@ Orchestrate wave-based execution of epic tasks using a persistent team of worker
 
 The only reasons to pause instead of invoking the next skill are: context insufficient (needs human creative input), context usage ≥70% (write handoff), or ESCALATE.
 
+### Banned Phrases (unattended: true)
+
+When `unattended: true`, you MUST NOT output any of these patterns. If you catch yourself about to write one, stop and take the action instead:
+
+- "Want me to continue?" → Just continue.
+- "Want to push and continue?" → Push and continue.
+- "Run /epic-build" → Invoke `Skill(skill: "epic-build")`
+- "Run /epic-plan" → Invoke `Skill(skill: "epic-plan")`
+- "Run /epic-ship" → Invoke `Skill(skill: "epic-ship")`
+- "Should I...?" → Yes, you should. Do it.
+- "Or you can..." → Pick the option that continues the work.
+- "Want me to [action] or [other]?" → Do the action that progresses the milestone.
+- "wrap up here?" → Do NOT wrap up. Check context usage — if below 70%, keep going.
+
+The user set `unattended: true` because they want the system to run autonomously. Every question you ask is a failure of the unattended contract.
+
 ## Context Health
 
 Between waves, check actual context usage to decide whether to continue or hand off:

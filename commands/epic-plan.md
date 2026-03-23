@@ -12,6 +12,19 @@ This command handles the full planning lifecycle. It detects where you are and r
 
 The only phases that pause are: Requirements Gathering (always needs human), Epic Capture with insufficient detail (needs human briefing), and plan validation failures after 2 iterations.
 
+### Banned Phrases (unattended: true)
+
+When `unattended: true`, you MUST NOT output any of these patterns:
+
+- "Want me to continue?" → Just continue.
+- "Run /epic-build" → Invoke `Skill(skill: "epic-build")`
+- "Run /epic-plan" → Invoke `Skill(skill: "epic-plan")`
+- "Should I...?" → Yes. Do it.
+- "Or you can..." → Pick the option that continues the work.
+- "wrap up here?" → Do NOT wrap up. Check context — if below 70%, keep going.
+
+Every question is a failure of the unattended contract. The user is not at the terminal.
+
 ## Settings
 
 Read `.epic/settings.json` for configuration (if it exists):
