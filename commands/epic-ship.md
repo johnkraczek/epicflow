@@ -160,14 +160,18 @@ If GitHub milestone exists:
    ```bash
    gh api repos/{org}/{repo}/milestones/{milestone_number} --method PATCH -f state=closed
    ```
-3. Identify the roadmap folder: glob `plans/*-requirements/` matching the milestone title
-4. Move to archive: `plans/{name}-requirements/` → `plans/archive/{name}-requirements/`
-5. Commit:
+3. **Archive all related plan files**:
+   - Create `plans/archive/` if it doesn't exist
+   - Identify the roadmap folder: glob `plans/*-requirements/` matching the milestone title
+   - Move to archive: `plans/{name}-requirements/` → `plans/archive/{name}-requirements/`
+   - Also archive any standalone plan files related to this milestone (e.g., `plans/01-{slug}.md`, `plans/{slug}.md`) — check plan file contents for references to the milestone or its epics
+   - This is critical: leftover roadmap files cause `/epic-plan` to think unstarted work exists
+4. Commit:
    ```bash
    git add plans/
    git commit -m "epic-ship: archive roadmap — {milestone_title}"
    ```
-6. Report: "Milestone shipped and archived. Ready for a new roadmap with `/epic-plan`."
+5. Report: "Milestone shipped and archived. Ready for a new roadmap with `/epic-plan`."
 
 ## Phase 7: Distill (Optional)
 

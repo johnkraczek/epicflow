@@ -58,9 +58,20 @@ When `unattended: false`, pause at every phase transition for human confirmation
 ## Phase Detection
 
 1. Check for roadmap: glob `plans/*-requirements/*-roadmap.md`
-2. Check for milestone in bd: `bd list --type epic --labels "milestone" --json`
-3. Check for active epic in bd: `bd list --type epic --status in_progress --json`
-4. Check for child tasks: `bd children {epic_id} --json`
+2. **Staleness check** (if roadmap found): Before assuming the roadmap is actionable, verify its work isn't already done:
+   - Read the roadmap's epic list
+   - For each epic, check if its key deliverables already exist in the codebase (grep for files, functions, or routes it describes)
+   - If ALL epics appear to be already implemented → the roadmap is stale. Archive it:
+     ```bash
+     mkdir -p plans/archive
+     mv plans/{name}-requirements plans/archive/{name}-requirements
+     git add plans/ && git commit -m "epic-plan: archive stale roadmap — {name} (already implemented)"
+     ```
+     Then re-run phase detection (the roadmap is gone, so it will route differently).
+   - If at least one epic is NOT implemented → roadmap is valid, proceed normally
+3. Check for milestone in bd: `bd list --type epic --labels "milestone" --json`
+4. Check for active epic in bd: `bd list --type epic --status in_progress --json`
+5. Check for child tasks: `bd children {epic_id} --json`
 
 Route to the first matching phase:
 
