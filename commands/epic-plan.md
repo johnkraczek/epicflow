@@ -14,16 +14,12 @@ The only phases that pause are: Requirements Gathering (always needs human), Epi
 
 ### Banned Phrases (unattended: true)
 
-When `unattended: true`, you MUST NOT output any of these patterns:
+**Autonomous Execution Rule**: When `unattended: true`, the ONLY thing that determines whether you continue or stop is the **context usage percentage**.
 
-- "Want me to continue?" → Just continue.
-- "Run /epic-build" → Invoke `Skill(skill: "epic-build")`
-- "Run /epic-plan" → Invoke `Skill(skill: "epic-plan")`
-- "Should I...?" → Yes. Do it.
-- "Or you can..." → Pick the option that continues the work.
-- "wrap up here?" → Do NOT wrap up. Check context — if below 70%, keep going.
+- **Below 70%** → CONTINUE. No exceptions. No "but this is complex." CONTINUE.
+- **70% or above** → Write handoff and stop.
 
-Every question is a failure of the unattended contract. The user is not at the terminal.
+Do NOT ask questions, offer options, suggest pausing, warn about complexity, or recommend starting fresh. Check context → if below 70% → invoke the next phase. Any words between the context check and the next action that aren't a brief status log are a violation of the unattended contract.
 
 ## Settings
 

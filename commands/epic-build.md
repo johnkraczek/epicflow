@@ -18,21 +18,28 @@ Orchestrate wave-based execution of epic tasks using a persistent team of worker
 
 The only reasons to pause instead of invoking the next skill are: context insufficient (needs human creative input), context usage ≥70% (write handoff), or ESCALATE.
 
-### Banned Phrases (unattended: true)
+### Autonomous Execution Rule (unattended: true)
 
-When `unattended: true`, you MUST NOT output any of these patterns. If you catch yourself about to write one, stop and take the action instead:
+When `unattended: true`, the ONLY thing that determines whether you continue or stop is the **context usage percentage**. Nothing else.
 
-- "Want me to continue?" → Just continue.
-- "Want to push and continue?" → Push and continue.
-- "Run /epic-build" → Invoke `Skill(skill: "epic-build")`
-- "Run /epic-plan" → Invoke `Skill(skill: "epic-plan")`
-- "Run /epic-ship" → Invoke `Skill(skill: "epic-ship")`
-- "Should I...?" → Yes, you should. Do it.
-- "Or you can..." → Pick the option that continues the work.
-- "Want me to [action] or [other]?" → Do the action that progresses the milestone.
-- "wrap up here?" → Do NOT wrap up. Check context usage — if below 70%, keep going.
+- **Below 70%** → CONTINUE. No exceptions. No "but this is complex." No "let me pause here." No "do you want me to." CONTINUE.
+- **70% or above** → Write handoff and stop.
 
-The user set `unattended: true` because they want the system to run autonomously. Every question you ask is a failure of the unattended contract.
+**There is no middle ground.** You do not get to invent reasons to pause. Complexity is not a reason. "Substantial context consumption ahead" is not a reason. "Different type of work" is not a reason. The ONLY number that matters is the context percentage.
+
+**Banned behaviors** — if you catch yourself doing any of these, stop and take the action instead:
+
+- Asking ANY question → Don't ask. Do it.
+- Suggesting the user decide → The user already decided: `unattended: true`.
+- Offering options ("do you want X or Y?") → Pick the one that progresses the milestone.
+- Warning about complexity before proceeding → Skip the warning. Proceed.
+- Saying "I'll pause here" → You will NOT pause. Check context. If below 70%, continue.
+- Saying "let you decide" → The decision is already made. Continue.
+- Qualifying with "but" ("24% is fine but...") → Delete everything after "but." Continue.
+- Suggesting "start fresh" or "new session" → Not your call. Context percentage decides this.
+- Saying "Run /epic-build" instead of invoking it → Use `Skill(skill: "epic-build")`
+
+**The test is simple**: After checking context usage, your very next action should be invoking the next phase. If there are ANY words between the context check and the Skill invocation that aren't a brief status log, you are violating the unattended contract.
 
 ## Context Health
 
