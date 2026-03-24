@@ -53,43 +53,23 @@ When `unattended: false`, pause at every phase transition for human confirmation
 
 ## Phase Detection
 
-1. Check for roadmap: glob `plans/*-requirements/*-roadmap.md`
-2. **Staleness check** (if roadmap found): Before assuming the roadmap is actionable, verify its work isn't already done:
-   - Read the roadmap's epic list
-   - For each epic, check if its key deliverables already exist in the codebase (grep for files, functions, or routes it describes)
-   - If ALL epics appear to be already implemented → the roadmap is stale. Archive it:
-     ```bash
-     mkdir -p plans/archive
-     mv plans/{name}-requirements plans/archive/{name}-requirements
-     git add plans/ && git commit -m "epic-plan: archive stale roadmap — {name} (already implemented)"
-     ```
-     Then re-run phase detection (the roadmap is gone, so it will route differently).
-   - If at least one epic is NOT implemented → roadmap is valid, proceed normally
-3. Check for milestone in bd: `bd list --type epic --labels "milestone" --json`
-4. Check for active epic in bd: `bd list --type epic --status in_progress --json`
-5. Check for child tasks: `bd children {epic_id} --json`
+1. Check for milestone in bd with open epics: `bd list --type epic --labels "milestone" --json`
+2. Check for active epic in bd: `bd list --type epic --status in_progress --json`
+3. Check for child tasks: `bd children {epic_id} --json`
+4. Check for unprocessed roadmaps: glob `plans/*-requirements/*-roadmap.md`
+   - **Staleness check**: If roadmap found, verify its work isn't already done. If ALL epics are implemented → archive it and re-run detection.
 
 Route to the first matching phase:
 
 | State | Phase |
 |-------|-------|
-| No roadmap | **Requirements Gathering** |
-| Roadmap exists, no milestone | **Publish Milestone** |
-| Milestone exists, no active epic | **Epic Capture** |
 | Active epic, no tasks | **Decompose** |
-| Active epic with tasks | If `unattended: true` → invoke `Skill(skill: "epic-build")` (context sufficient: tasks exist and are ready). If `unattended: false` → suggest `/epic-build` |
+| Active epic with tasks | If `unattended: true` → invoke `Skill(skill: "epic-build")`. If `unattended: false` → suggest `/epic-build` |
+| Milestone exists, no active epic | **Epic Capture** |
+| Roadmap exists, no milestone | **Publish Milestone** |
+| Nothing to do | "Nothing to decompose. Run `/epic-requirements` to plan new work." |
 
----
-
-## Phase: Requirements Gathering
-
-Collaborative deep-dive to capture tool/feature requirements. This is the one phase that should remain conversational — it's about understanding what to build.
-
-1. Read the SOP: `.epic/library/tool-requirements/README.md` — this contains the 19-step requirements process
-2. Follow each step file in order (00 through 18). Each step has a Conversation Guide, Output Template, and Completion Criteria.
-3. Output: `plans/{name}-requirements/` folder + `{name}-roadmap.md`
-
-**Context check**: This phase is ALWAYS context-insufficient — it requires human creative input. Even with `unattended: true`, do NOT skip or auto-generate requirements. Pause and engage the human.
+**Note**: This command does NOT do requirements gathering. That is handled by `/epic-requirements`. If there are no milestones or roadmaps, direct the user there.
 
 ---
 

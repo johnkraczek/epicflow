@@ -777,6 +777,38 @@ When all child tasks for the current epic are closed and the review passes:
      - If `unattended: true` → invoke `Skill(skill: "epic-ship")` to ship the milestone.
      - If `unattended: false` → report "All epics complete. Run `/epic-ship` when ready."
 
+## Milestone Queue
+
+After `/epic-ship` completes (milestone shipped and archived), check for the next milestone in the queue.
+
+1. Write `.epic/build-session.lock` if not already present:
+   ```json
+   {"sessionId": "{CLAUDE_SESSION_ID}", "started": "{ISO timestamp}", "milestone": "", "branch": ""}
+   ```
+2. Query the queue:
+   ```bash
+   bd list --type epic --labels "milestone" --status open --json
+   ```
+3. For each milestone (sorted by bd priority, then creation date):
+   - Check if it has child epics: `bd children {milestone_bd_id} --json`
+   - If yes → this milestone is ready
+4. If a ready milestone is found:
+   - Check context usage
+   - If ≥70% → write handoff: "Next milestone: {title} (bd:{id}). Resume with `/epic-build`."
+   - If <70% → update lock file with new milestone, invoke `Skill(skill: "epic-plan")` to capture + decompose, which will auto-invoke build
+5. If no ready milestones:
+   - Delete `.epic/build-session.lock`
+   - Send notification: `bash ~/.claude/bin/epic-notify.sh 3 "Queue Empty" "All milestones built. Run /epic-requirements to plan more work."`
+   - Report: "All milestones complete. Build queue empty."
+
+### Lock File Management
+
+The build session maintains `.epic/build-session.lock` throughout its lifetime:
+- **Created**: when build starts or picks up from queue
+- **Updated**: when switching to a new milestone
+- **Deleted**: when queue is empty or session ends (handoff)
+- **Stale detection**: if lock exists but is >4 hours old and no active worktrees exist, other sessions may consider it stale
+
 ## Discovered Work Triage
 
 When a teammate sends a DISCOVERED_WORK message, the orchestrator must triage it. Do NOT batch these — triage each one as it arrives so critical items aren't buried.

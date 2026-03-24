@@ -123,7 +123,8 @@ Create the `.epic/` directory (if not already created) and write `settings.json`
   "workspace": {
     "unattended": false,
     "maxParallelAgents": 4,
-    "channel": "terminal"
+    "channel": "terminal",
+    "mode": "full"
   },
   "ntfy": {
     "server": "{confirmed or empty}",

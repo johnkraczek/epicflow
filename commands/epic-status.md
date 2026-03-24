@@ -59,19 +59,31 @@ Display a formatted summary:
 
 | Condition | Recommendation |
 |-----------|---------------|
-| No roadmap in `plans/` | `/epic-plan` — gather requirements first |
-| Roadmap exists, no milestone epic in bd | `/epic-plan` — publish milestone |
+| No milestones, no roadmaps | `/epic-requirements` — plan new work interactively |
+| Roadmap exists, no milestone in bd | `/epic-plan` — publish milestone from roadmap |
 | Milestone exists, no active epic | `/epic-plan` — capture next epic |
 | Active epic has no child tasks in bd | `/epic-plan` — decompose into tasks |
 | Ready tasks exist (`bd ready` returns results) | `/epic-build` — execute next wave |
 | All epic tasks done, more epics remain | `/epic-build` — will close epic and start next |
 | All milestone epics done | `/epic-ship` — create PR and merge to main |
+| Multiple milestones queued | Both: `/epic-requirements` for planning + `/epic-build` for building (parallel sessions) |
+
+### Milestone Queue
+
+Show queued milestones:
+```bash
+bd list --type epic --labels "milestone" --status open --json
+```
+Display as a table with milestone name, epic count, and priority.
+
+If `.epic/build-session.lock` exists: note "Build session active on {milestone}."
 
 ## Step 5: Quick Actions Menu
 
 Show available actions:
-- `/epic-plan` — Plan or decompose
-- `/epic-build` — Build next wave
+- `/epic-requirements` — Plan new work (interactive requirements + SOP routing)
+- `/epic-plan` — Decompose epics into tasks
+- `/epic-build` — Build next wave (or start queue processing)
 - `/epic-ship` — Ship completed milestone
 - `/epic-audit` — Run consistency audit
 - `/epic-next` — Find what to work on next
