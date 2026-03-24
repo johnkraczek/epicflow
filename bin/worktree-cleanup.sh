@@ -161,11 +161,26 @@ for WT_PATH in $WORKTREES; do
     fi
   fi
 
-  # Check 3: Are there commits not merged to the parent branch?
+  # Check 3: Are there commits not merged to any branch?
   WT_BRANCH=$(git -C "$WT_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
   if [ -n "$WT_BRANCH" ] && [ "$WT_BRANCH" != "HEAD" ]; then
-    # Find the parent branch this worktree was created from
-    PARENT_BRANCH=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo "main")
+    # Find the best parent branch: check orchestrator branches first, then main
+    # Worker worktrees merge into orchestrator branches, not main directly.
+    PARENT_BRANCH=""
+    WT_HEAD=$(git -C "$WT_PATH" rev-parse HEAD 2>/dev/null)
+
+    # Check if the worktree HEAD is reachable from any other local branch
+    for candidate in $(git -C "$PROJECT_DIR" branch --format='%(refname:short)' 2>/dev/null); do
+      [ "$candidate" = "$WT_BRANCH" ] && continue
+      if git -C "$PROJECT_DIR" merge-base --is-ancestor "$WT_HEAD" "$candidate" 2>/dev/null; then
+        PARENT_BRANCH="$candidate"
+        break
+      fi
+    done
+
+    # If no branch contains this work, fall back to main
+    [ -z "$PARENT_BRANCH" ] && PARENT_BRANCH="main"
+
     UNMERGED=$(git -C "$PROJECT_DIR" log --oneline "$PARENT_BRANCH".."$WT_BRANCH" 2>/dev/null || echo "")
     if [ -n "$UNMERGED" ]; then
       UNMERGED_COUNT=$(echo "$UNMERGED" | wc -l | tr -d ' ')
