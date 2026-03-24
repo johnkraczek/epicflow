@@ -159,6 +159,38 @@ Use these values throughout:
    - Tag: v{version}
    ```
 
+## Phase 9: Rollback Procedure
+
+If the release breaks production after deployment:
+
+1. Revert the merge commit on production:
+   ```bash
+   git checkout production
+   git revert {merge_commit} --no-edit
+   git push origin production
+   ```
+2. The deployment platform auto-deploys the revert
+3. Create a hotfix issue:
+   ```bash
+   bd create --title "Hotfix: revert v{version}" --type bug --priority 0 --description "Release v{version} broke production. Reverted. Root cause investigation needed."
+   ```
+4. Investigate root cause on main (do NOT fix on production directly)
+5. When fixed, cut a new release with `/epic-release`
+6. If a hotfix SOP exists (`.epic/library/hotfix/README.md`), follow that instead for the fix
+
+## Phase 10: Canary Release (optional)
+
+If the release includes high-risk changes:
+
+1. Instead of auto-merging the release PR, pause after PR creation
+2. Use the deployment platform's preview/staging environment to test the release candidate
+3. Share the preview URL for manual verification
+4. Monitor for errors (function logs, browser console, error tracking)
+5. After confidence period (user decides duration): merge the PR
+6. For low-risk releases: auto-merge as before (default)
+
+In **unattended** mode: default to auto-merge unless the release includes commits tagged as `BREAKING CHANGE`. If breaking changes detected, pause for confirmation (context insufficient for risk assessment).
+
 ---
 
 _EpicFlow Release Command — powered by bd_

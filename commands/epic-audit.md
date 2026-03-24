@@ -40,6 +40,8 @@ Use these values throughout:
 
 **Group E — Security Hardening**: Session authority (CAT-19), Authentication hardening (CAT-20), oRPC security (CAT-21), Database security (CAT-22), Frontend security (CAT-23), API authorization (CAT-24)
 
+**Group F — Accessibility**: Accessibility compliance (CAT-25) — keyboard navigation, focus management, screen reader support, color contrast, form labels, ARIA usage, motion preferences. Scan rules in `.epic/library/accessibility-review/README.md`.
+
 Each agent reads `docs/*.md` for the canonical patterns to audit against. Agents scan for violations by comparing actual code to documented conventions.
 
 ### Scope-Aware Scanning
@@ -101,7 +103,7 @@ _(Refer to the detailed scan rules in the project's security documentation. Thes
 
 ## Execution
 
-Spawn 5 parallel subagents (one per group) using the Agent tool with `subagent_type: "consistency-auditor"`.
+Spawn 6 parallel subagents (one per group) using the Agent tool with `subagent_type: "consistency-auditor"`.
 
 Each agent prompt:
 ```

@@ -75,6 +75,9 @@ Show available actions:
 - `/epic-ship` — Ship completed milestone
 - `/epic-audit` — Run consistency audit
 - `/epic-next` — Find what to work on next
+- `/epic-mobile` — Switch notification channel
+
+If production is broken: follow the hotfix SOP at `.epic/library/hotfix/README.md` — bypasses normal milestone flow.
 
 ## GitHub Sync
 

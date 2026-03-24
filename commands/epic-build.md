@@ -223,12 +223,19 @@ Run the checkCommand from .epic/settings.json.
 All checks must pass before proceeding.
 
 ### 6. Self-Review
-Before committing, verify your work against the task spec:
+Before committing, verify your work against the task spec AND the Definition of Done:
+
+**Task spec check:**
 1. Re-read the **Success Criteria** from your task description
 2. For each criterion, confirm you actually satisfied it — not approximately, not with a workaround, but exactly
 3. Re-read the **Key References** file list
 4. For each file listed, confirm you made the changes the spec describes
-5. If any criterion is NOT met or any file is NOT changed as specified:
+
+**Definition of Done check:**
+5. Read `.epic/library/definition-of-done.md` (if it exists) and verify each item on the checklist
+6. Key items: check command passes, no debugging statements, docs updated if behavior changed, commit message has BD ID
+
+7. If any criterion is NOT met or any file is NOT changed as specified:
    - Go back to step 4 and finish the work
    - Do NOT proceed to commit with incomplete work
 
@@ -464,8 +471,20 @@ After all tasks in a wave complete:
    - **Extra files** (not in Key References): Log as informational — workers sometimes need to touch adjacent files. Only flag if the extra files overlap with another task's Key References.
    - Tasks that fail scope verification are NOT closed and do NOT count toward wave completion.
 
-3. Run `.claude/hooks/verify-wave.sh` — this runs tests + check
-4. **Node Repair** (on verification failure) — see decision tree below
+3. **Diff review**: For each task that passed scope verification, spawn a lightweight **review subagent** (one-shot, not a teammate) to scan the diff:
+   - Get the diff: `git diff wave-{N}-pre..HEAD -- {files from this task}`
+   - Check for:
+     - Duplicated utilities (reimplemented something that already exists in the codebase?)
+     - Pattern violations (conflicts with documented conventions in project docs?)
+     - Hardcoded values that should be config/env vars
+     - Missing error handling on external calls
+     - TODO/FIXME/HACK comments without tracking issues
+   - If issues found: message the orchestrator. Orchestrator decides: send worker back to fix (minor) or create a follow-up task (cosmetic).
+   - If clean: proceed.
+   - This is NOT a full code review — it's a 2-minute pattern scan. Keep it fast.
+
+4. Run `.claude/hooks/verify-wave.sh` — this runs tests + check
+5a. **Node Repair** (on verification failure) — see decision tree below
 5. Close confirmed tasks in bd (only tasks that passed both merge verification AND scope verification):
    ```bash
    bd close {task_bd_id}
@@ -714,8 +733,14 @@ The review agent should:
 2. Check each success criterion against the actual codebase
 3. Run the relevant unit tests using the testCommand from .epic/settings.json with appropriate filter flag for the changed packages
 4. Run the project's E2E test command if configured (check .epic/settings.json or project scripts for E2E test commands)
-5. Report verdict:
-   - **APPROVED**: All criteria met, tests pass → proceed to Epic Complete
+5. **Live verification**: Start the dev server and verify the app actually works:
+   - Use the playwright-cli skill (if available) or manual checks
+   - Navigate to pages affected by this epic
+   - Verify: no crash, no blank page, no console errors
+   - This catches "tests pass but app is broken" — missing imports, broken routes, SSR errors
+   - If playwright-cli is not available, skip this step (it's a bonus check, not a gate)
+6. Report verdict:
+   - **APPROVED**: All criteria met, tests pass, app runs → proceed to Epic Complete
    - **NEEDS WORK**: Create follow-up tasks in bd, run another wave
 
 If needs work: sync follow-up tasks into the team task list, message idle workers.

@@ -42,6 +42,7 @@ Use these values throughout:
 
 ## Phase 2: Acceptance Validation
 
+### Per-Epic Validation
 1. For each epic in the milestone:
    - Read the epic brief from bd: `bd show {epic_bd_id}`
    - Extract Success Criteria from the description
@@ -49,9 +50,18 @@ Use these values throughout:
      - **Testable**: search for matching tests, verify they pass
      - **Manual** (guided): ask user to confirm
      - **Manual** (if `unattended: true`): auto-pass with note — context sufficient (tests verified the testable criteria)
-2. Report validation results
-3. If failures and tests fail: **pause and ask the human** — context insufficient (acceptance criteria not met)
-4. If failures are manual-only and `unattended: true`: flag, log, and continue — these will be caught in human review of the PR
+
+### Cross-Epic Integration Verification
+2. After per-epic checks, run a **full** integration verification across all epics:
+   - Run the complete test suite: `{testCommand}` (all packages, not filtered to specific epics)
+   - Run E2E tests if configured (check project scripts for E2E commands)
+   - If using playwright: run against a local dev server to catch runtime integration issues
+   - Failures here are cross-epic issues that individual epic reviews missed
+   - If failures: create fix tasks, do NOT ship until resolved
+
+3. Report validation results
+4. If failures and tests fail: **pause and ask the human** — context insufficient (acceptance criteria not met)
+5. If failures are manual-only and `unattended: true`: flag, log, and continue — these will be caught in human review of the PR
 
 ## Phase 3: Retrospective
 
@@ -166,12 +176,23 @@ If GitHub milestone exists:
    - Move to archive: `plans/{name}-requirements/` → `plans/archive/{name}-requirements/`
    - Also archive any standalone plan files related to this milestone (e.g., `plans/01-{slug}.md`, `plans/{slug}.md`) — check plan file contents for references to the milestone or its epics
    - This is critical: leftover roadmap files cause `/epic-plan` to think unstarted work exists
-4. Commit:
+4. **Update Changelog**:
+   - If `CHANGELOG.md` doesn't exist at the project root, create it with a header: `# Changelog`
+   - Add a new section at the top:
+     ```markdown
+     ## [{milestone_title}] - {YYYY-MM-DD}
+     ### Features
+     - {epic titles from this milestone}
+     ### Fixes
+     - {any bug-fix tasks completed during the milestone}
+     ```
+   - Source the data from bd: `bd children {milestone_bd_id} --json` for epic titles, and individual task descriptions for bug fixes
+5. Commit:
    ```bash
-   git add plans/
-   git commit -m "epic-ship: archive roadmap — {milestone_title}"
+   git add plans/ CHANGELOG.md
+   git commit -m "epic-ship: archive roadmap + update changelog — {milestone_title}"
    ```
-5. Report: "Milestone shipped and archived. Ready for a new roadmap with `/epic-plan`."
+6. Report: "Milestone shipped and archived. Ready for a new roadmap with `/epic-plan`."
 
 ## Phase 7: Distill (Optional)
 

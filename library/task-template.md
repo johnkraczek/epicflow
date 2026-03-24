@@ -39,4 +39,12 @@ If `.beads/formulas/task-template.md` exists, use that instead.
 ## Dependencies
 - Depends on: {task IDs or "none"}
 - Blocks: {task IDs that depend on this}
+
+## Documentation Impact
+- Docs that may need updating: {list or "none"}
+- If this task changes behavior described in project docs, update the relevant doc before reporting SUCCESS
+
+## Performance Considerations (if applicable)
+- Does this task touch data-fetching, rendering, or hot paths? {yes/no}
+- If yes: note baseline metrics before changes and compare after
 ```
