@@ -75,19 +75,31 @@ Use these values throughout:
 
 ## Initialization
 
-0. **Resume check**: If `.epic/continue-here.md` exists:
+0. **Enter orchestrator worktree**: The build orchestrator runs in its own worktree for the milestone branch. This isolates all runtime state (lock files, team manifests, wave state) from other orchestrators.
+   ```bash
+   git branch --show-current    # verify we're on the milestone branch
+   ```
+   Use `EnterWorktree` with `name: "orchestrator-{milestone_slug}"`.
+   After entering, run setupCommands from `.epic/settings.json`.
+
+   All runtime state files (`.epic/build-session.lock`, `.epic/team-active.json`, `.epic/wave-active.json`, `.epic/continue-here.md`) live in this worktree and are **never committed**. This means multiple orchestrators can run simultaneously on different milestones — their state files are completely isolated by the filesystem.
+
+1. **Resume check**: If `.epic/continue-here.md` exists in the worktree:
    - Read it for: wave number, completed task IDs, remaining task IDs, branch, epic ID
    - Verify the epic is still in_progress in bd: `bd show {epic_bd_id}`
-   - Verify the branch is correct: `git branch --show-current`
    - Delete the handoff file after reading
    - Skip to Team Setup with the remaining tasks
    - Log: "Resuming from wave {N} handoff"
 
-1. Find the active epic: `bd list --type epic --status in_progress --json`
-2. If no active epic: exit with "No active epic. Run /epic-plan first."
-3. Find ready tasks: `bd ready --json`
+2. **Write lock file**: Create `.epic/build-session.lock` in the worktree:
+   ```json
+   {"sessionId": "{CLAUDE_SESSION_ID}", "started": "{ISO timestamp}", "milestone": "{milestone_bd_id}", "branch": "{milestone_branch}"}
+   ```
+
+3. Find the active epic: `bd list --type epic --status in_progress --json`
+4. If no active epic: exit with "No active epic. Run /epic-plan first."
+5. Find ready tasks: `bd ready --json`
    - If the active epic has child tasks, filter ready tasks to those under this epic
-4. Verify current branch matches the milestone branch. If wrong branch, switch.
 
 ## Team Setup
 
@@ -781,10 +793,7 @@ When all child tasks for the current epic are closed and the review passes:
 
 After `/epic-ship` completes (milestone shipped and archived), check for the next milestone in the queue.
 
-1. Write `.epic/build-session.lock` if not already present:
-   ```json
-   {"sessionId": "{CLAUDE_SESSION_ID}", "started": "{ISO timestamp}", "milestone": "", "branch": ""}
-   ```
+1. **Exit current worktree**: Use `ExitWorktree` to merge the orchestrator's milestone branch back to main. The runtime state files (lock, team manifest, wave state) are ephemeral and disappear with the worktree.
 2. Query the queue:
    ```bash
    bd list --type epic --labels "milestone" --status open --json
@@ -795,19 +804,20 @@ After `/epic-ship` completes (milestone shipped and archived), check for the nex
 4. If a ready milestone is found:
    - Check context usage
    - If ≥70% → write handoff: "Next milestone: {title} (bd:{id}). Resume with `/epic-build`."
-   - If <70% → update lock file with new milestone, invoke `Skill(skill: "epic-plan")` to capture + decompose, which will auto-invoke build
+   - If <70% → invoke `Skill(skill: "epic-plan")` to capture + decompose the new milestone, which will auto-invoke build. The new build will enter a fresh orchestrator worktree for the new milestone.
 5. If no ready milestones:
-   - Delete `.epic/build-session.lock`
    - Send notification: `bash ~/.claude/bin/epic-notify.sh 3 "Queue Empty" "All milestones built. Run /epic-requirements to plan more work."`
    - Report: "All milestones complete. Build queue empty."
 
-### Lock File Management
+### Parallel Orchestrators
 
-The build session maintains `.epic/build-session.lock` throughout its lifetime:
-- **Created**: when build starts or picks up from queue
-- **Updated**: when switching to a new milestone
-- **Deleted**: when queue is empty or session ends (handoff)
-- **Stale detection**: if lock exists but is >4 hours old and no active worktrees exist, other sessions may consider it stale
+Because each orchestrator runs in its own worktree with ephemeral state files, multiple build orchestrators CAN run simultaneously on different milestones. There is no shared state to collide:
+- Each orchestrator has its own `.epic/build-session.lock` (in its worktree)
+- Each orchestrator creates teams named `epic-{epic_bd_id}` (unique per epic)
+- Workers create worktrees named `worker-{N}-{task_bd_id}` (unique per task)
+- bd operations are scoped to different epics/tasks (no overlap)
+- Git branches are per-milestone (no overlap during build)
+- The only merge point is the PR to main at `/epic-ship` — standard git merge, resolved by the second PR rebasing
 
 ## Discovered Work Triage
 
