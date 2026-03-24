@@ -42,18 +42,22 @@ if [ -z "$COMMAND" ]; then
 fi
 
 # --- Catastrophic commands (always block) ---
+# NOTE: rm -rf with absolute paths is allowed IF the path is under PROJECT_DIR.
+# Only block rm -rf targeting system root, home root, or current directory.
 CATASTROPHIC_PATTERNS=(
-  'rm -rf /'
-  'rm -rf /*'
+  'rm -rf /[^A-Za-z]'    # rm -rf / or rm -rf /; but NOT rm -rf /Users/...
+  'rm -rf /\s*$'          # rm -rf / at end of command
+  'rm -rf /\*'            # rm -rf /*
   'rm -rf ~'
   'rm -rf ~/'
-  'rm -rf \.'
+  'rm -rf \.\s*$'         # rm -rf . at end
+  'rm -rf \./\s*$'        # rm -rf ./ at end
   'mkfs\.'
   'dd\s+if=.* of=/dev/'
   ':(){:|:&};:'
   '>\s*/dev/sd[a-z]'
   'chmod -R 777 /'
-  'chown -R .* /'
+  'chown -R .* /$'
 )
 
 for pattern in "${CATASTROPHIC_PATTERNS[@]}"; do
@@ -64,6 +68,32 @@ JSON
     exit 0
   fi
 done
+
+# --- Block rm -rf outside project directory ---
+# Allow rm -rf for paths under PROJECT_DIR, block everything else
+if echo "$COMMAND" | grep -qE 'rm\s+(-[a-zA-Z]*r|-rf)'; then
+  # Extract paths from the rm command (everything after flags)
+  RM_ARGS=$(echo "$COMMAND" | sed -E 's/rm\s+(-[a-zA-Z]+\s+)*//')
+  for arg in $RM_ARGS; do
+    # Skip flags
+    [[ "$arg" == -* ]] && continue
+    # Resolve to absolute path
+    case "$arg" in
+      /*) ABS_PATH="$arg" ;;
+      *)  ABS_PATH="$PROJECT_DIR/$arg" ;;
+    esac
+    # Block if path is NOT under project directory
+    case "$ABS_PATH" in
+      "$PROJECT_DIR"/*) ;; # allowed — inside project
+      *)
+        cat <<JSON
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: rm -rf target '$arg' is outside the project directory. Only paths under $PROJECT_DIR are allowed."}}
+JSON
+        exit 0
+        ;;
+    esac
+  done
+fi
 
 # --- Critical path protection (block destructive ops on important dirs) ---
 CRITICAL_PATHS=(
