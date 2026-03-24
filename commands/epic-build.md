@@ -135,13 +135,20 @@ Create a persistent team for this build session. The team persists across waves 
    - Log: "Cross-epic dep: {task} blocked by {upstream_task} from epic {other_epic}"
 
 3. **Spawn teammates**:
-   Spawn `maxParallelAgents` workers using the Agent tool with `team_name` and `name` parameters:
+   Spawn `maxParallelAgents` workers using the Agent tool with `team_name` and `name` parameters.
+
+   **CRITICAL**: Each worker's prompt MUST include this instruction verbatim at the very top:
+   ```
+   BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: "{worker_name}-{task_bd_id}" to create your own isolated worktree. Do NOT work directly in the orchestrator's directory. Multiple workers are running in parallel — without your own worktree, you will collide with other workers' file changes. This is not optional.
+   ```
+
+   Then include the full worker prompt (see Worker Prompt section below).
 
    ```
    Agent(
      team_name: "epic-{epic_bd_id}",
      name: "worker-{N}",
-     prompt: "{worker prompt — see Worker Prompt section}",
+     prompt: "BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: '{worker_name}-{task_bd_id}' ... {rest of worker prompt}",
      subagent_type: "general-purpose"
    )
    ```
@@ -209,15 +216,22 @@ bd show {task_bd_id} --refs
 ```
 Read any documents listed in Relevant Documentation and Key References.
 
-### 3. Enter Worktree
+### 3. Enter Worktree — MANDATORY
 
-You are spawned inside the orchestrator's worktree, which is already on the milestone branch. Your worktree will branch from this — do NOT try to checkout a different branch first.
+**You MUST create your own worktree before making ANY changes. This is not optional.**
+
+Multiple workers run in parallel. Without your own worktree, your file edits will collide with other workers. Do NOT skip this step. Do NOT work directly in the current directory.
 
 ```bash
-git branch --show-current    # should show the milestone branch — confirm before proceeding
+git branch --show-current    # confirm you're on the milestone branch
 ```
 
-Use `EnterWorktree` with `name: "{worker_name}-{task_bd_id}"`. This creates your isolated worktree branched from the current (milestone) branch.
+Then IMMEDIATELY call:
+```
+EnterWorktree(name: "{worker_name}-{task_bd_id}")
+```
+
+This creates your isolated worktree branched from the milestone branch. ALL your work happens inside this worktree. If you find yourself editing files without having called `EnterWorktree` first, STOP and call it now.
 After entering:
 1. Write your heartbeat file:
    ```bash
