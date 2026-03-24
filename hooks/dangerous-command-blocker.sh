@@ -112,7 +112,7 @@ CRITICAL_PATHS=(
   'node_modules$'
 )
 
-DESTRUCTIVE_OPS='rm |rm -|rmdir |mv .* /dev/null|> '
+DESTRUCTIVE_OPS='(^|\s)(rm\s|rmdir\s)'
 
 for path in "${CRITICAL_PATHS[@]}"; do
   if echo "$COMMAND" | grep -qE "$DESTRUCTIVE_OPS" && echo "$COMMAND" | grep -qE "$path"; then
