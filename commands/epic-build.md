@@ -211,19 +211,13 @@ Read any documents listed in Relevant Documentation and Key References.
 
 ### 3. Enter Worktree
 
-CRITICAL: Your worktree MUST be branched from the correct base branch.
+You are spawned inside the orchestrator's worktree, which is already on the milestone branch. Your worktree will branch from this — do NOT try to checkout a different branch first.
+
 ```bash
-git branch --show-current    # verify you are on the right branch
+git branch --show-current    # should show the milestone branch — confirm before proceeding
 ```
 
-Branch selection:
-- In a milestone: branch from the milestone branch (e.g., `milestone/audit-remediation`)
-- Depends on another task that just completed: branch from the branch with their merged work
-- No milestone/deps: branch from `main`
-
-Make sure you are on the correct branch BEFORE calling EnterWorktree.
-
-Use `EnterWorktree` with `name: "{worker_name}-{task_bd_id}"`.
+Use `EnterWorktree` with `name: "{worker_name}-{task_bd_id}"`. This creates your isolated worktree branched from the current (milestone) branch.
 After entering:
 1. Write your heartbeat file:
    ```bash
