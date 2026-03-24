@@ -539,6 +539,8 @@ Workers have limited context windows. After completing 2-3 tasks, a worker's con
 
 To rotate: send `{type: "shutdown_request"}` to the old worker, then spawn a new one with the same `team_name` and a new `name` (e.g., `worker-{N+1}`).
 
+**One task per worker at a time.** The orchestrator MUST NOT combine multiple tasks into a single agent prompt. Each worker claims ONE task from the task list, completes it, then claims the next. Never say "do tasks A, B, and C" in one prompt — this defeats the decomposition, bypasses the self-review gate on each task, and burns context.
+
 ### Handling Worker Messages (during wave)
 
 Workers send structured messages during execution. Handle them as they arrive — do not batch.
