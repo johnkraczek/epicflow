@@ -17,10 +17,6 @@
 #     "criticalPaths": ["supabase/migrations/"]
 #   }
 
-# Suppress ALL stderr for the entire script — prevents error messages from
-# leaking into output that Claude Code might misinterpret.
-exec 2>/dev/null
-
 # Read stdin once, then run all checks. If anything crashes, allow the command.
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null) || true
