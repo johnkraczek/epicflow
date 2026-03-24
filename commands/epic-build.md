@@ -460,17 +460,12 @@ After all tasks in a wave complete:
    git tag "wave-{N}-pre"
    ```
 
-0b. **Worktree cleanup**: Run the safe cleanup script to remove orphaned worktrees from this wave:
+0b. **Worktree cleanup**: Clean up all worker worktrees from this wave. Workers have already exited their worktrees (ExitWorktree merges changes), so remaining worktrees are orphans.
    ```bash
    bash ~/.claude/bin/worktree-cleanup.sh
+   bash ~/.claude/bin/worktree-cleanup.sh --recover   # force-clean any that survived
    ```
-   The script checks each worktree for:
-   - `.agent-active` heartbeat file — if recent (< 10 min), the worktree is skipped (another agent is working)
-   - Uncommitted changes — if present, the worktree is skipped (agent may have crashed mid-work, needs manual review)
-   - Unmerged commits — if the worktree branch has commits not on the parent branch, the worktree is skipped (work not yet merged)
-   - Otherwise — safe to remove
-
-   If any worktrees are skipped as dirty or unmerged, log a warning in the wave log.
+   After both passes, verify with `git worktree list` — only the main repo and orchestrator worktree should remain.
    Delete `.epic/wave-active.json` after cleanup.
 
 1. **Merge verification**: For each task that reported success, confirm its changes landed on the milestone branch:
@@ -794,9 +789,13 @@ If approved: proceed to Epic Complete below.
 When all child tasks for the current epic are closed and the review passes:
 
 1. **Shutdown the team**: Send `{type: "shutdown_request"}` to all teammates via SendMessage
-2. Wait for all teammates to go idle, then clean up:
-   - Run `bash ~/.claude/bin/worktree-cleanup.sh`
+2. Wait for all teammates to go idle, then **clean up ALL worker worktrees from this epic**:
+   - First, run a normal cleanup: `bash ~/.claude/bin/worktree-cleanup.sh`
+   - Then, run with `--recover` to force-clean any remaining dirty worktrees: `bash ~/.claude/bin/worktree-cleanup.sh --recover`
+   - Verify no worker worktrees remain: `git worktree list` — the only worktrees should be the main repo and the orchestrator worktree
+   - If any worker worktrees survived both cleanup passes, they have unmerged work — log a warning but proceed (the work was either merged via ExitWorktree or is lost)
    - Delete `.epic/team-active.json`
+   - This is critical: leftover worktrees from previous epics accumulate and waste disk space. Clean up EVERY time an epic completes.
 3. Close the epic in bd: `bd close {epic_bd_id}`
 4. If a GitHub issue is linked:
    - Close it: `gh issue close {epic_github_number} --repo {org}/{repo}`
