@@ -175,11 +175,11 @@ If GitHub milestone exists:
 
 ## Phase 7: Distill (Optional)
 
-If the milestone had a novel workflow pattern worth reusing, offer to distill it:
-```bash
-bd mol distill {milestone_bd_id} {suggested_formula_name}
-```
-This creates a new formula template from the completed work graph.
+If the milestone introduced a novel workflow pattern worth reusing, offer to create a new SOP in the process library:
+
+1. Ask: "This milestone used a pattern that might be reusable. Want to save it as an SOP?"
+2. If yes: create `.epic/library/{sop-name}/README.md` with the pattern's steps, conversation guides, and output templates
+3. Commit: `git add .epic/library/ && git commit -m "epic-ship: add {sop-name} SOP from {milestone_title}"`
 
 ---
 

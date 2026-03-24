@@ -145,7 +145,7 @@ When the user picks a GitHub issue not yet in bd:
 ```bash
 bd create --title "{issue_title}" --type {bug|feature} --description "{issue_body}\n\nGitHub: #{number}" --priority 2
 ```
-Then suggest the appropriate formula: `bug-fix` for bugs, `feature` for features.
+Then suggest the appropriate SOP from the process library: `.epic/library/bug-fix/` for bugs, `.epic/library/feature/` for features.
 
 ---
 

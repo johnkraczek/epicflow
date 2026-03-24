@@ -24,7 +24,7 @@ Use these values throughout:
 3. Create subdirectories: `findings/`, `action-items/`
 4. Get git context: branch + short commit hash
 5. Build docs index: glob `docs/*.md`, map each to key topics
-6. Optionally instantiate via formula: `bd mol pour audit --var audit_scope="full"`
+6. Read the audit SOP: `.epic/library/audit/README.md` — contains the full scan process, categories, and finding format
 
 ## Categories
 
@@ -142,7 +142,7 @@ For each approved item, create a bd issue:
 bd create --title "Audit: {finding summary}" --type bug --description "{finding details}" --priority {2 for major, 3 for minor}
 ```
 
-Write approved items to `{audit_dir}/action-items/`. These feed into `/epic-plan` or can be addressed individually via the `bug-fix` formula.
+Write approved items to `{audit_dir}/action-items/`. These feed into `/epic-plan` or can be addressed individually using the bug-fix SOP (`.epic/library/bug-fix/README.md`).
 
 ## Finalize
 

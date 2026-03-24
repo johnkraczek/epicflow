@@ -89,8 +89,8 @@ Route to the first matching phase:
 
 Collaborative deep-dive to capture tool/feature requirements. This is the one phase that should remain conversational — it's about understanding what to build.
 
-1. Instantiate the tool-requirements formula: `bd mol pour tool-requirements --var tool_name="{name}"`
-2. Work through each step with the user (the formula contains all document structures and conversation strategies)
+1. Read the SOP: `.epic/library/tool-requirements/README.md` — this contains the 19-step requirements process
+2. Follow each step file in order (00 through 18). Each step has a Conversation Guide, Output Template, and Completion Criteria.
 3. Output: `plans/{name}-requirements/` folder + `{name}-roadmap.md`
 
 **Context check**: This phase is ALWAYS context-insufficient — it requires human creative input. Even with `unattended: true`, do NOT skip or auto-generate requirements. Pause and engage the human.
@@ -190,12 +190,9 @@ Break the epic into tasks with dependency ordering. All tasks are created in bd.
 1. Read the epic brief from bd: `bd show {epic_bd_id}`
 2. Read all referenced spec docs from the brief
 3. Identify discrete deliverables
-4. Check available formulas: `bd formula list`
-   - If a matching formula exists (e.g., `feature`), offer to use it:
-     ```bash
-     bd mol pour feature --var feature_name="{epic_title}" --var scope="{scope}"
-     ```
-   - If no formula matches, decompose manually (see below)
+4. Check the process library: `ls .epic/library/`
+   - If a matching SOP exists (e.g., `feature/`), read its `README.md` and follow the decomposition steps
+   - If no matching SOP exists, decompose manually (see below)
 
 ### Manual Decomposition
 
@@ -222,7 +219,7 @@ Break the epic into tasks with dependency ordering. All tasks are created in bd.
 
 ### Task Description Format
 
-Each task's description in bd should follow this structure. If `.beads/formulas/task-template.md` exists, use that instead.
+Each task's description in bd should follow this structure. If `.epic/library/task-template.md` exists, read and use that instead.
 
 The **Parent Context** section is critical — it carries the "why" from the milestone and epic so the agent understands the bigger picture when making implementation decisions.
 

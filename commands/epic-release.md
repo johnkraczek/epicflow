@@ -6,8 +6,6 @@ description: "EpicFlow — Cut a release from main to production with version bu
 
 Creates a versioned release from `main` → `production`.
 
-Optionally instantiate via formula: `bd mol pour release --var version="{version}"`
-
 ## Project Settings
 
 Read `.epic/settings.json` for project-specific configuration. If it doesn't exist, exit with: "No EpicFlow project found. Run /epic-init first."

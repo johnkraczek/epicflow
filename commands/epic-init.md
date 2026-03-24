@@ -85,9 +85,26 @@ If **yes**:
 
 If **no**: set `ntfy.enabled` to `false`. Can be configured later with `/epic-init`.
 
-## Step 6: Write .epic/settings.json
+## Step 6: Seed Process Library
 
-Create the `.epic/` directory and write `settings.json`:
+Create `.epic/library/` with default SOPs from the EpicFlow installation:
+
+1. Check if `~/.epicflow/library/` exists (the epicflow repo's default SOPs)
+2. If it exists, copy the entire directory:
+   ```bash
+   cp -r ~/.epicflow/library/ .epic/library/
+   ```
+3. If it doesn't exist, create an empty library:
+   ```bash
+   mkdir -p .epic/library
+   ```
+4. Note: ".epic/library/ seeded with {count} SOPs. Customize them for your project."
+
+The library is project-specific — once copied, the project owns its SOPs and can modify them independently.
+
+## Step 7: Write .epic/settings.json
+
+Create the `.epic/` directory (if not already created) and write `settings.json`:
 
 ```json
 {
@@ -119,7 +136,7 @@ Create the `.epic/` directory and write `settings.json`:
 }
 ```
 
-## Step 7: Generate Project-Specific Hooks
+## Step 8: Generate Project-Specific Hooks
 
 Create `.claude/hooks/` directory if it doesn't exist.
 
@@ -151,7 +168,7 @@ Write `.claude/hooks/dangerous-command-blocker.sh` — a PreToolUse hook that bl
 
 Make it executable: `chmod +x .claude/hooks/dangerous-command-blocker.sh`
 
-## Step 8: Wire Hooks into .claude/settings.local.json
+## Step 9: Wire Hooks into .claude/settings.local.json
 
 Read the existing `.claude/settings.local.json` (or create `{}` if it doesn't exist).
 
@@ -166,7 +183,7 @@ Merge in the following hook wiring (don't overwrite existing hooks — append to
 
 Write the merged result back to `.claude/settings.local.json`.
 
-## Step 9: Summary
+## Step 10: Summary
 
 Print a summary of what was created:
 
