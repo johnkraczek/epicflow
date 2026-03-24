@@ -2,6 +2,11 @@
 # EpicFlow — Dangerous Command Blocker (PreToolUse)
 # Blocks destructive shell commands before they execute.
 #
+# SAFETY: This script must ONLY output valid JSON deny responses or nothing.
+# Any unexpected output (error messages, partial strings) causes Claude Code
+# to show "BLOCKED: null". To prevent this, we run the real logic in a
+# subshell and validate the output.
+#
 # Global patterns protect against universal dangers. Projects can extend
 # with additional patterns by creating .claude/hooks/dangerous-commands.json:
 #
@@ -12,26 +17,36 @@
 #     "criticalPaths": ["supabase/migrations/"]
 #   }
 
-# Wrap everything in a function to catch unexpected errors.
-# If anything goes wrong, exit 0 (allow) rather than outputting garbage to stdout.
-trap 'exit 0' ERR
+# Suppress ALL stderr for the entire script — prevents error messages from
+# leaking into output that Claude Code might misinterpret.
+exec 2>/dev/null
 
+# Read stdin once, then run all checks. If anything crashes, allow the command.
 INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null) || true
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || true
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null) || true
+
+# If jq failed to parse, allow the command
+if [ -z "$TOOL_NAME" ] && [ -z "$COMMAND" ] && [ -z "$FILE_PATH" ]; then
+  exit 0
+fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+
+# Helper: output a valid deny JSON and exit. Uses jq to properly escape the reason string.
+deny() {
+  local reason="$1"
+  jq -n --arg r "$reason" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$r}}'
+  exit 0
+}
 
 # --- Global Claude directory protection (Edit/Write) ---
 if [ -n "$FILE_PATH" ] && [ "${EPICFLOW_DEV:-0}" != "1" ]; then
   HOME_CLAUDE="$HOME/.claude"
   case "$FILE_PATH" in
     "$HOME_CLAUDE"/commands/*|"$HOME_CLAUDE"/hooks/*|"$HOME_CLAUDE"/bin/*|"$HOME_CLAUDE"/agents/*|"$HOME_CLAUDE"/settings.json)
-      cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Cannot modify global EpicFlow files in ~/.claude/. These are managed by /epic-init and should only be updated manually or via a dedicated upgrade process. If you need to modify these files, ask the user to restart Claude with process-editing enabled."}}
-JSON
-      exit 0
+      deny "BLOCKED: Cannot modify global EpicFlow files in ~/.claude/. Ask the user to restart Claude with process-editing enabled."
       ;;
   esac
 fi
@@ -62,10 +77,7 @@ CATASTROPHIC_PATTERNS=(
 
 for pattern in "${CATASTROPHIC_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qE "$pattern"; then
-    cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Catastrophic command detected — '${pattern}' pattern matched. This command could destroy your system."}}
-JSON
-    exit 0
+    deny "BLOCKED: Catastrophic command detected. This command could destroy your system."
   fi
 done
 
@@ -86,10 +98,7 @@ if echo "$COMMAND" | grep -qE 'rm\s+(-[a-zA-Z]*r|-rf)'; then
     case "$ABS_PATH" in
       "$PROJECT_DIR"/*) ;; # allowed — inside project
       *)
-        cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: rm -rf target '$arg' is outside the project directory. Only paths under $PROJECT_DIR are allowed."}}
-JSON
-        exit 0
+        deny "BLOCKED: recursive delete target is outside the project directory. Only paths under $PROJECT_DIR are allowed."
         ;;
     esac
   done
@@ -111,10 +120,7 @@ DESTRUCTIVE_OPS='rm |rm -|rmdir |mv .* /dev/null|> '
 
 for path in "${CRITICAL_PATHS[@]}"; do
   if echo "$COMMAND" | grep -qE "$DESTRUCTIVE_OPS" && echo "$COMMAND" | grep -qE "$path"; then
-    cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Destructive operation on critical path '${path}'. These files are protected from deletion/overwrite."}}
-JSON
-    exit 0
+    deny "BLOCKED: Destructive operation on a critical path. These files are protected."
   fi
 done
 
@@ -129,59 +135,38 @@ DANGEROUS_GIT=(
 
 for pattern in "${DANGEROUS_GIT[@]}"; do
   if echo "$COMMAND" | grep -qE "$pattern"; then
-    cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Dangerous git command detected — '${pattern}'. This could cause irreversible data loss."}}
-JSON
-    exit 0
+    deny "BLOCKED: Dangerous git command detected. This could cause irreversible data loss."
   fi
 done
 
 # --- bd (beads) database protection ---
 if echo "$COMMAND" | grep -qE 'bd\s+init\s+.*--force|bd\s+init\s+--force'; then
-  cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: 'bd init --force' wipes the entire beads issue tracker database. All issues, epics, and dependencies will be permanently lost. If the bd database is broken, ask the user to fix it manually or restore from a Dolt remote."}}
-JSON
-  exit 0
+  deny "BLOCKED: bd init --force wipes the entire beads issue tracker database."
 fi
 
 if echo "$COMMAND" | grep -qE 'rm\s+.*\.beads/dolt'; then
-  cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Deleting .beads/dolt removes the beads issue tracker database. All issues will be permanently lost."}}
-JSON
-  exit 0
+  deny "BLOCKED: Deleting .beads/dolt removes the beads issue tracker database."
 fi
 
 # --- Worktree protection (multi-agent safety) ---
 if echo "$COMMAND" | grep -qE 'git\b.*\bworktree\s+(remove|prune)'; then
-  cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Do not use git worktree remove/prune directly — another agent may be working in that worktree. Use: bash ~/.claude/bin/worktree-cleanup.sh"}}
-JSON
-  exit 0
+  deny "BLOCKED: Do not use git worktree remove/prune directly. Use: bash ~/.claude/bin/worktree-cleanup.sh"
 fi
 
 if echo "$COMMAND" | grep -qE 'git\b.*\bclean\b' && ! echo "$COMMAND" | grep -qE '\-e\s+\.claude'; then
-  cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: git clean without excluding .claude/. Other agents may have active worktrees. Use 'git clean -fd -e .claude/' instead."}}
-JSON
-  exit 0
+  deny "BLOCKED: git clean without excluding .claude/. Use git clean -fd -e .claude/ instead."
 fi
 
 # --- Block deleting the project root itself ---
 if echo "$COMMAND" | grep -qE "rm\s+(-[a-zA-Z]*r|--recursive)"; then
   # Block "rm -rf ." or "rm -rf ./" (deleting project root from inside)
   if echo "$COMMAND" | grep -qE "rm\s+(-[a-zA-Z]*r[a-zA-Z]*)\s+\./?( |$)"; then
-    cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Cannot delete the project root directory. This would destroy the entire project."}}
-JSON
-    exit 0
+    deny "BLOCKED: Cannot delete the project root directory."
   fi
   # Block the literal project dir path as target
   ESCAPED_PD=$(printf '%s' "$PROJECT_DIR" | sed 's/[.[\\*^$()+?{|]/\\&/g')
   if echo "$COMMAND" | grep -qE "rm\s+(-[a-zA-Z]*r[a-zA-Z]*)\s+${ESCAPED_PD}/?( |$)"; then
-    cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Cannot delete the project root directory. This would destroy the entire project."}}
-JSON
-    exit 0
+    deny "BLOCKED: Cannot delete the project root directory."
   fi
 fi
 
@@ -194,10 +179,7 @@ if [ -f "$EXTENSIONS" ]; then
     REGEX=$(jq -r ".patterns[$i].regex" "$EXTENSIONS" 2>/dev/null)
     REASON=$(jq -r ".patterns[$i].reason" "$EXTENSIONS" 2>/dev/null)
     if [ -n "$REGEX" ] && echo "$COMMAND" | grep -qE "$REGEX"; then
-      cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: ${REASON}"}}
-JSON
-      exit 0
+      deny "BLOCKED: ${REASON}"
     fi
   done
 
@@ -205,10 +187,7 @@ JSON
   PATHS=$(jq -r '.criticalPaths[]?' "$EXTENSIONS" 2>/dev/null)
   for path in $PATHS; do
     if echo "$COMMAND" | grep -qE "$DESTRUCTIVE_OPS" && echo "$COMMAND" | grep -q "$path"; then
-      cat <<JSON
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Destructive operation on project-protected path '${path}'."}}
-JSON
-      exit 0
+      deny "BLOCKED: Destructive operation on a project-protected path."
     fi
   done
 fi
