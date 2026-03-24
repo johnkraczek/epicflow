@@ -111,6 +111,12 @@ After the SOP produces a roadmap (skip this phase for hotfixes):
 9. **Create milestone worktree**: All work happens in worktrees — never on main directly.
    Use `EnterWorktree` with `name: "milestone-{slug}"`. This creates an isolated working directory for the milestone branch.
 10. Show summary table of created epics (bd IDs + GitHub issue numbers)
+11. **Commit all artifacts**: The roadmap, requirements documents, and any plan files must be committed before proceeding. This ensures the build session has access to them when it picks up the milestone.
+    ```bash
+    git add plans/
+    git commit -m "epic-requirements: {milestone_title} — roadmap + {N} epics"
+    git push origin milestone/{slug}
+    ```
 
 ## Phase 4: Queue Confirmation
 
