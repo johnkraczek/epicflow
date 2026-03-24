@@ -135,7 +135,36 @@ If GitHub milestone exists:
 1. Post retrospective as comment on the last completed epic's GitHub issue
 2. Post acceptance validation results
 
-## Phase 5: Create PR and Merge
+## Phase 5: Archive and Changelog
+
+Before creating the PR, prepare the final commit on the milestone branch:
+
+1. **Archive all related plan files**:
+   - Create `plans/archive/` if it doesn't exist
+   - Identify the roadmap folder: glob `plans/*-requirements/` matching the milestone title
+   - Move to archive: `plans/{name}-requirements/` → `plans/archive/{name}-requirements/`
+   - Also archive any standalone plan files related to this milestone
+   - This is critical: leftover roadmap files cause `/epic-plan` to think unstarted work exists
+2. **Update Changelog**:
+   - If `CHANGELOG.md` doesn't exist at the project root, create it with a header: `# Changelog`
+   - Add a new section at the top:
+     ```markdown
+     ## [{milestone_title}] - {YYYY-MM-DD}
+     ### Features
+     - {epic titles from this milestone}
+     ### Fixes
+     - {any bug-fix tasks completed during the milestone}
+     ```
+   - Source the data from bd: `bd children {milestone_bd_id} --json`
+3. Commit:
+   ```bash
+   git add plans/ CHANGELOG.md
+   git commit -m "epic-ship: archive roadmap + update changelog — {milestone_title}"
+   ```
+
+## Phase 6: Create PR and Merge
+
+The orchestrator is running in a worktree on the milestone branch. The PR is the path back to main.
 
 1. Push branch: `git push origin milestone/{slug}`
 2. Create PR targeting main:
@@ -150,6 +179,9 @@ If GitHub milestone exists:
    - **Total Epics**: {count}
    - **Total Tasks**: {count}
 
+   ### Changelog
+   {changelog entries from Phase 5}
+
    Milestone: {milestone_title}
    EOF
    ```
@@ -158,41 +190,30 @@ If GitHub milestone exists:
    ```bash
    gh pr view {pr_number} --repo {org}/{repo} --json state,statusCheckRollup
    ```
-5. On merge success:
-   - `git checkout main && git pull origin main`
-   - `git branch -d milestone/{slug}`
-6. On CI failure: attempt to fix if the error is clearly a test/lint issue (context sufficient). If the failure is unclear or involves infrastructure → pause and ask the human (context insufficient).
+5. On CI failure: attempt to fix if the error is clearly a test/lint issue (context sufficient). Push the fix and resume polling. If the failure is unclear or involves infrastructure → pause and ask the human (context insufficient).
+6. On merge success → proceed to Phase 7
 
-## Phase 6: Close Milestone
+## Phase 7: Close Milestone and Exit Worktree
+
+The PR is merged. Clean up and exit.
 
 1. Close the milestone epic in bd: `bd close {milestone_bd_id}`
 2. If a GitHub milestone exists, close it:
    ```bash
    gh api repos/{org}/{repo}/milestones/{milestone_number} --method PATCH -f state=closed
    ```
-3. **Archive all related plan files**:
-   - Create `plans/archive/` if it doesn't exist
-   - Identify the roadmap folder: glob `plans/*-requirements/` matching the milestone title
-   - Move to archive: `plans/{name}-requirements/` → `plans/archive/{name}-requirements/`
-   - Also archive any standalone plan files related to this milestone (e.g., `plans/01-{slug}.md`, `plans/{slug}.md`) — check plan file contents for references to the milestone or its epics
-   - This is critical: leftover roadmap files cause `/epic-plan` to think unstarted work exists
-4. **Update Changelog**:
-   - If `CHANGELOG.md` doesn't exist at the project root, create it with a header: `# Changelog`
-   - Add a new section at the top:
-     ```markdown
-     ## [{milestone_title}] - {YYYY-MM-DD}
-     ### Features
-     - {epic titles from this milestone}
-     ### Fixes
-     - {any bug-fix tasks completed during the milestone}
-     ```
-   - Source the data from bd: `bd children {milestone_bd_id} --json` for epic titles, and individual task descriptions for bug fixes
-5. Commit:
+3. **Exit the orchestrator worktree**: Use `ExitWorktree` to return to the main working directory. The worktree's ephemeral state files (lock, team manifest, wave state) are cleaned up automatically.
+4. Pull the merged changes:
    ```bash
-   git add plans/ CHANGELOG.md
-   git commit -m "epic-ship: archive roadmap + update changelog — {milestone_title}"
+   git checkout main
+   git pull origin main
    ```
-6. Report: "Milestone shipped and archived. Ready for a new roadmap with `/epic-plan`."
+5. Clean up the remote branch:
+   ```bash
+   git push origin --delete milestone/{slug}
+   ```
+6. Report: "Milestone '{milestone_title}' shipped and merged to main."
+7. If `unattended: true` → check the **Milestone Queue** (see `/epic-build`) for the next ready milestone.
 
 ## Phase 7: Distill (Optional)
 
