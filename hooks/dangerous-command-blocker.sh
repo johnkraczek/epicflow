@@ -12,10 +12,14 @@
 #     "criticalPaths": ["supabase/migrations/"]
 #   }
 
+# Wrap everything in a function to catch unexpected errors.
+# If anything goes wrong, exit 0 (allow) rather than outputting garbage to stdout.
+trap 'exit 0' ERR
+
 INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || echo "")
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
@@ -45,9 +49,9 @@ CATASTROPHIC_PATTERNS=(
   'rm -rf ~/'
   'rm -rf \.'
   'mkfs\.'
-  'dd if=.* of=/dev/'
+  'dd\s+if=.* of=/dev/'
   ':(){:|:&};:'
-  '> /dev/sda'
+  '>\s*/dev/sd[a-z]'
   'chmod -R 777 /'
   'chown -R .* /'
 )
