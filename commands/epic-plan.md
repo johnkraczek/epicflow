@@ -309,10 +309,32 @@ Sometimes a task in the current epic depends on a deliverable from a different e
 - Test tasks contain test specifications (inputs, expected outputs, what correct failure looks like)
 - Implementation tasks depend on their test task (enforces test-first)
 - Story points: 1 (trivial), 2 (small), 3 (medium), 5 (significant), 8 (large)
-- Prefer more small tasks over fewer large ones
 - Read the project's testing documentation (if it exists) — check for minimum test coverage requirements, E2E conventions, integration test patterns, and permission boundary specs
 - If a feature should ship incrementally or is high-risk, check `.epic/library/feature-flags/` for the feature flag SOP. Add flag creation as the first task and flag cleanup as the last task.
 - For tasks that modify UI, add a note to check `.epic/library/accessibility-review/` during self-review
+
+### Task Size Rules
+
+**Worker agents have limited context windows.** A task that touches too many files or requires too much reasoning will exhaust the worker's context before it finishes. Prefer many small tasks over few large ones.
+
+**Hard cap: 3 story points maximum per task.** Do NOT create 5 or 8 point tasks. If a deliverable would be 5+ points, split it:
+
+| Instead of... | Create... |
+|---|---|
+| 5-point task touching 10 files | Two 2-3 point tasks, each touching 5 files |
+| 8-point task migrating all tables | Three 2-3 point tasks, each migrating a subset |
+| 5-point task: "build the whole feature" | 2-point schema task + 2-point API task + 2-point UI task |
+
+**Splitting guidelines:**
+- Split by **file group** — contacts tables in one task, billing tables in another
+- Split by **layer** — schema changes, API changes, UI changes as separate tasks
+- Split by **scope** — workspace-level work, agency-level work as separate tasks
+- Each task should touch **at most 5-7 files** in Key References
+- If a task's Key References list exceeds 7 files, it's too big — split it
+
+**Why this matters:** A 2-point task completes in one worker session. A 5-point task risks context exhaustion, leading to incomplete work, simplification, or NEEDS_DECOMPOSE requests that waste a wave cycle.
+
+The orchestrator can also rotate workers — after a worker completes a task, it picks up the next one fresh. More small tasks = more natural rotation points.
 
 ### Velocity-Calibrated Estimation
 

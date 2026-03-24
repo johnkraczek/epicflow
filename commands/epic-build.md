@@ -529,14 +529,24 @@ After all tasks in a wave complete:
 8. Stage only implementation changes (source code, docs, config). **Do NOT stage `.epic/` or `.beads/` state files.**
 9. Commit (hooks enforce: verified, right branch)
 
+### Worker Rotation
+
+Workers have limited context windows. After completing 2-3 tasks, a worker's context may be degraded. The orchestrator should proactively rotate workers:
+
+- **After a worker completes a task**: if the worker has completed 3+ tasks in this session, send it a shutdown message and spawn a fresh replacement. Fresh workers produce better results.
+- **If a worker goes idle without responding**: it may have exhausted context. Shut it down, spawn a fresh worker, and reassign its in-progress task.
+- **If a worker sends NEEDS_DECOMPOSE**: after handling the decomposition, consider shutting down that worker (it spent context on a failed attempt) and spawning a fresh one for the new smaller tasks.
+
+To rotate: send `{type: "shutdown_request"}` to the old worker, then spawn a new one with the same `team_name` and a new `name` (e.g., `worker-{N+1}`).
+
 ### Handling Worker Messages (during wave)
 
 Workers send structured messages during execution. Handle them as they arrive — do not batch.
 
 **On PROGRESS**:
 - Log the progress update. No response needed.
-- Use these to detect stalls: if a worker on a 3+ point task hasn't sent a PROGRESS message within ~15 minutes of their last one (or since they claimed the task), send them a check-in: "Status check on task {task_bd_id} — are you still making progress?"
-- If the worker doesn't respond to the check-in (goes idle without replying), treat it as a potential stall. Check if their worktree has recent commits. If no commits and no response, the worker may have exhausted context — mark the task for reassignment to a fresh worker.
+- Use these to detect stalls: if a worker hasn't sent a PROGRESS message within ~15 minutes of their last one (or since they claimed the task), send them a check-in: "Status check on task {task_bd_id} — are you still making progress?"
+- If the worker doesn't respond to the check-in (goes idle without replying), treat it as a potential stall. Check if their worktree has recent commits. If no commits and no response, the worker likely exhausted context — shut it down and spawn a fresh replacement. Reassign the task.
 
 **On BLOCKED**:
 1. Read what the worker says is missing
