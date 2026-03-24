@@ -10,6 +10,18 @@ Orchestrate wave-based execution of epic tasks using a persistent team of worker
 
 **You are the orchestrator. You do NOT write code or fix issues directly.** Your job is to read state, manage the team, sync tasks, update bd, and manage GitHub. All implementation work — including gate fixes, test failures, and verification issues — MUST be delegated to a teammate or subagent. This keeps the orchestrator context clean and focused on coordination.
 
+### Zero Exceptions Gate
+
+**The codebase must be fully clean at every wave boundary and before every commit. No exceptions.**
+
+- ALL tests must pass — zero failures. There are no "pre-existing" failures. If a test was passing before this wave and is now failing, the wave broke it and the wave must fix it.
+- The check command (`{checkCommand}`) must exit 0 — zero type errors, zero lint warnings, zero format issues, zero build failures.
+- If ANY check fails: the responsible worker fixes it. If the worker can't fix it, the orchestrator delegates to another worker or a repair subagent. Do NOT commit with failures. Do NOT skip. Do NOT defer.
+- Pre-existing issues are not a valid excuse. If the check command fails, it fails. Fix it before committing.
+- This gate applies to: post-wave commits, epic review, and milestone shipping. CI must pass on the PR or it is a build failure.
+
+This is a hard gate. The orchestrator MUST NOT allow code to be committed or PRs to be created that fail the check command or test suite.
+
 **When `unattended: true`, NEVER pause to ask the user what to do next.** If the context-sufficiency check passes and context usage is below 70%, invoke the next phase using the **Skill tool**. This means:
 - After epic complete with more epics remaining → `Skill(skill: "epic-plan")`
 - After all epics done → `Skill(skill: "epic-ship")`
@@ -237,9 +249,16 @@ If you believe a task is genuinely impossible as written (not just large — act
 Only modify files listed in Key References (plus any new files the spec requires).
 If you discover out-of-scope issues, note them but do not fix them.
 
-### 5. Verify
-Run the checkCommand from .epic/settings.json.
-All checks must pass before proceeding.
+### 5. Verify (Zero Exceptions Gate)
+Run the full test suite AND the check command from .epic/settings.json:
+```bash
+{testCommand}     # ALL tests must pass — zero failures
+{checkCommand}    # Must exit 0 — zero type errors, zero lint warnings, zero format issues
+```
+If ANY check fails: fix it. Re-run. Repeat until everything passes.
+- Do NOT proceed with failures.
+- Do NOT blame "pre-existing" issues — if it fails now, you fix it now.
+- Do NOT skip checks or defer fixes to a follow-up task.
 
 ### 6. Self-Review
 Before committing, verify your work against the task spec AND the Definition of Done:
@@ -502,9 +521,9 @@ After all tasks in a wave complete:
    - If clean: proceed.
    - This is NOT a full code review — it's a 2-minute pattern scan. Keep it fast.
 
-4. Run `.claude/hooks/verify-wave.sh` — this runs tests + check
-5a. **Node Repair** (on verification failure) — see decision tree below
-5. Close confirmed tasks in bd (only tasks that passed both merge verification AND scope verification):
+4. **Zero Exceptions Gate**: Run `.claude/hooks/verify-wave.sh` — ALL tests must pass (zero failures) and the check command must exit 0 (zero errors). There are no pre-existing exceptions. If it fails, the wave must fix it before committing.
+5. **Node Repair** (on verification failure) — see decision tree below. The wave CANNOT be committed until the gate passes.
+6. Close confirmed tasks in bd (only tasks that passed merge verification, scope verification, AND the Zero Exceptions Gate):
    ```bash
    bd close {task_bd_id}
    ```

@@ -51,13 +51,14 @@ Use these values throughout:
      - **Manual** (guided): ask user to confirm
      - **Manual** (if `unattended: true`): auto-pass with note — context sufficient (tests verified the testable criteria)
 
-### Cross-Epic Integration Verification
+### Cross-Epic Integration Verification (Zero Exceptions Gate)
 2. After per-epic checks, run a **full** integration verification across all epics:
-   - Run the complete test suite: `{testCommand}` (all packages, not filtered to specific epics)
+   - Run the complete test suite: `{testCommand}` — ALL tests must pass (zero failures)
+   - Run the check command: `{checkCommand}` — must exit 0 (zero errors)
    - Run E2E tests if configured (check project scripts for E2E commands)
    - If using playwright: run against a local dev server to catch runtime integration issues
-   - Failures here are cross-epic issues that individual epic reviews missed
-   - If failures: create fix tasks, do NOT ship until resolved
+   - **There are no pre-existing exceptions.** If any check fails, fix it before shipping. The PR to main MUST pass CI or the milestone is not shippable.
+   - If failures: create fix tasks, delegate to a subagent, re-run until clean. Do NOT create the PR until the gate passes.
 
 3. Report validation results
 4. If failures and tests fail: **pause and ask the human** — context insufficient (acceptance criteria not met)
