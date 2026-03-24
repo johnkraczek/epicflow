@@ -19,7 +19,7 @@ The only phases that pause are: Requirements Gathering (always needs human), Epi
 - **Below 70%** → CONTINUE. No exceptions. No "but this is complex." CONTINUE.
 - **70% or above** → Write handoff and stop.
 
-Do NOT ask questions, offer options, suggest pausing, warn about complexity, or recommend starting fresh. Check context → if below 70% → invoke the next phase. Any words between the context check and the next action that aren't a brief status log are a violation of the unattended contract.
+Do NOT ask questions, offer options, suggest pausing, warn about complexity, or recommend starting fresh. Check context → if below 70% → invoke the next phase. If the context check fails or returns nothing → **CONTINUE** (a failed check does not mean context is full). Any words between the context check and the next action that aren't a brief status log are a violation of the unattended contract.
 
 ## Settings
 

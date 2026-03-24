@@ -65,8 +65,7 @@ This returns context usage as a percentage (e.g., `42% (420K/1000K)`).
 
 - **Below 70%**: Continue working. Start the next wave.
 - **70% or above**: Finish the current wave, write a handoff (see "Handoff" section), and stop. Do NOT start new waves.
-
-Do NOT guess or estimate context usage. Always call the script to get the real number before deciding whether to continue.
+- **Script fails or returns nothing**: **CONTINUE.** A failed context check means the session data isn't available (headless agent, no statusline, etc.) — it does NOT mean context is full. With a 1M token context window, the default assumption is that there is room. Never stop work because you couldn't read the context percentage.
 
 ## Settings
 
