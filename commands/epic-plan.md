@@ -109,10 +109,8 @@ Create milestone epic in bd + GitHub milestone + individual epic issues, and cre
      ```bash
      bd update {epic_bd_id} --description "{original_desc}\n\nGitHub: #{github_issue_number}"
      ```
-8. **Ask: worktree or local branch?**
-   - **Always ask** (regardless of unattended setting) — this affects the working environment
-   - **If worktree**: use the `EnterWorktree` tool with `name: "milestone-{slug}"`
-   - **If local branch**: `git checkout -b milestone/{slug}` from main
+8. **Create milestone worktree**: All work happens in worktrees — never on main directly.
+   Use `EnterWorktree` with `name: "milestone-{slug}"`. This creates an isolated working directory for the milestone branch.
 9. Show summary table of created epics (bd IDs + GitHub issue numbers)
 10. **Tech Debt Allocation**: After creating epics from the roadmap, check for existing debt:
     - Query open agent-suggested issues: `gh issue list --label "agent-suggested" --label "needs-review" --state open --repo {org}/{repo} --json number,title,labels`

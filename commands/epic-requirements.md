@@ -108,9 +108,8 @@ After the SOP produces a roadmap (skip this phase for hotfixes):
    - Create GitHub issue with label `plan-ready`, assigned to milestone
    - Update bd issue with GitHub reference
 8. **Tech Debt Allocation**: Check for open `agent-suggested` + `needs-review` issues and standalone bugs. Allocate up to 20% of milestone capacity for tech debt. Create a "Tech Debt" epic if items fit.
-9. **Ask: worktree or local branch?**
-   - **If worktree**: use `EnterWorktree` with `name: "milestone-{slug}"`
-   - **If local branch**: `git checkout -b milestone/{slug}` from main
+9. **Create milestone worktree**: All work happens in worktrees — never on main directly.
+   Use `EnterWorktree` with `name: "milestone-{slug}"`. This creates an isolated working directory for the milestone branch.
 10. Show summary table of created epics (bd IDs + GitHub issue numbers)
 
 ## Phase 4: Queue Confirmation
