@@ -86,25 +86,20 @@ Use these values throughout:
 
 ## Initialization
 
-0. **Enter orchestrator worktree**: The build orchestrator runs in its own worktree for the milestone branch. This isolates all runtime state (lock files, team manifests, wave state) from other orchestrators.
-   ```bash
-   git branch --show-current    # verify we're on the milestone branch
-   ```
-   Use `EnterWorktree` with `name: "orchestrator-{milestone_slug}"`.
-   After entering, run setupCommands from `.epic/settings.json`.
+0. **The orchestrator works from the main repo root.** No orchestrator worktree — the orchestrator does NOT call `EnterWorktree`. This is critical: workers need to call `EnterWorktree` to isolate their work, and `EnterWorktree` fails if already inside a worktree. The orchestrator stays in the main repo so workers can create their own worktrees.
 
-   All runtime state files (`.epic/build-session.lock`, `.epic/team-active.json`, `.epic/wave-active.json`, `.epic/continue-here.md`) live in this worktree and are **never committed**. This means multiple orchestrators can run simultaneously on different milestones — their state files are completely isolated by the filesystem.
+   Runtime state files (`.epic/build-session.lock`, `.epic/team-active.json`, `.epic/wave-active.json`, `.epic/continue-here.md`) live in `.epic/` in the main repo and are gitignored. Only one build runs at a time — the lock file prevents concurrent builds.
 
-1. **Resume check**: If `.epic/continue-here.md` exists in the worktree:
+1. **Resume check**: If `.epic/continue-here.md` exists:
    - Read it for: wave number, completed task IDs, remaining task IDs, branch, epic ID
    - Verify the epic is still in_progress in bd: `bd show {epic_bd_id}`
    - Delete the handoff file after reading
    - Skip to Team Setup with the remaining tasks
    - Log: "Resuming from wave {N} handoff"
 
-2. **Write lock file**: Create `.epic/build-session.lock` in the worktree:
-   ```json
-   {"sessionId": "{CLAUDE_SESSION_ID}", "started": "{ISO timestamp}", "milestone": "{milestone_bd_id}", "branch": "{milestone_branch}"}
+2. **Write lock file**:
+   ```bash
+   bash ~/.epicflow/bin/epic-build-setup.sh lock "$CLAUDE_SESSION_ID" "{milestone_bd_id}" "{milestone_branch}"
    ```
 
 3. Find the active epic: `bd list --type epic --status in_progress --json`
@@ -137,9 +132,11 @@ Create a persistent team for this build session. The team persists across waves 
 3. **Spawn teammates**:
    Spawn `maxParallelAgents` workers using the Agent tool with `team_name` and `name` parameters.
 
+   **CRITICAL — NEVER spawn bare Agents.** Workers MUST be spawned with `team_name` and `name` parameters. Without these, workers don't have `SendMessage` or `TaskUpdate`, and all enforcement is silently bypassed. A bare `Agent()` call without team params will produce a worker that CAN'T follow the required protocol.
+
    **CRITICAL**: Each worker's prompt MUST include this instruction verbatim at the very top:
    ```
-   BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: "{worker_name}-{task_bd_id}" to create your own isolated worktree. Do NOT work directly in the orchestrator's directory. Multiple workers are running in parallel — without your own worktree, you will collide with other workers' file changes. This is not optional.
+   BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: "{worker_name}-{task_bd_id}" to create your own isolated worktree. Do NOT work directly in the main repo. Multiple workers run in parallel — without your own worktree, your file edits will collide with other workers. This is not optional.
    ```
 
    Then include the full worker prompt (see Worker Prompt section below).
@@ -148,31 +145,25 @@ Create a persistent team for this build session. The team persists across waves 
    Agent(
      team_name: "epic-{epic_bd_id}",
      name: "worker-{N}",
-     prompt: "BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: '{worker_name}-{task_bd_id}' ... {rest of worker prompt}",
+     prompt: "BEFORE DOING ANY WORK: You MUST call EnterWorktree with name: '{worker_name}-{task_bd_id}' to create your own isolated worktree. ... {rest of worker prompt}",
      subagent_type: "general-purpose"
    )
    ```
 
-   Spawn all teammates in a single message (parallel Agent tool calls).
+   Spawn all teammates in a single message (parallel Agent tool calls). Even when spawning a SINGLE worker (e.g., for a serial task), always include `team_name` and `name`.
 
-4. **Tag the pre-wave state** so rollback is possible:
+4. **Monitor workers**: After spawning, watch for ACK messages and worktree creation. If a worker doesn't ACK within ~2 minutes or doesn't create a worktree within ~3 minutes, shut it down and spawn a replacement.
+
+   Workers start in the main repo root. `EnterWorktree` works on first call (no nesting). The `protect-worktrees.sh` hook prevents workers from editing files in each other's worktrees.
+
+5. **Tag the pre-wave state** so rollback is possible:
    ```bash
    git tag "wave-1-pre"
    ```
 
-5. **Write team manifest** to `.epic/team-active.json`:
-   ```json
-   {
-     "team": "epic-{epic_bd_id}",
-     "epic": "{epic_bd_id}",
-     "started": "{ISO timestamp}",
-     "branch": "{milestone_branch}",
-     "maxWorkers": 4,
-     "workers": [
-       {"name": "worker-1", "status": "spawned"},
-       {"name": "worker-2", "status": "spawned"}
-     ]
-   }
+6. **Write team manifest** via the build setup script:
+   ```bash
+   bash ~/.epicflow/bin/epic-build-setup.sh team-manifest "epic-{epic_bd_id}" "{epic_bd_id}" "{milestone_branch}" 4 '[{"name":"worker-1","status":"spawned"},{"name":"worker-2","status":"spawned"}]'
    ```
 
 ## Worker Prompt
@@ -186,9 +177,21 @@ You are a worker on the EpicFlow team "epic-{epic_bd_id}", building {epic_title}
 - Name: {worker_name} (e.g., "worker-1")
 - Team: epic-{epic_bd_id}
 
+## ⚠️ MANDATORY: ACK Every Task You Claim
+
+Every time you claim a task, your VERY NEXT action must be sending an ACK message to the orchestrator. Not after reading the spec. Not after entering a worktree. IMMEDIATELY after the TaskUpdate claim call:
+
+```
+SendMessage(to: "orchestrator"): "ACK task {task_bd_id}: {task_title}. Starting now."
+```
+
+Do this for EVERY task. No exceptions. The orchestrator cannot see that you claimed the task — this message is the only signal. Without it, the orchestrator may assign your task to another worker, causing duplicate work.
+
+**Worktree isolation is enforced.** A PreToolUse hook (`protect-worktrees.sh`) blocks Edit and Write operations on files inside other workers' worktrees. You can only modify files in your own worktree. If you see "BLOCKED: Attempted to modify files in worktree...", you are trying to edit another worker's files — work only in your own worktree.
+
 ## Project Context
-- Working directory: {cwd}
-- Branch: {milestone_branch}
+- Working directory: {cwd} (main repo root — you MUST enter your own worktree before editing files)
+- Branch: {current_branch}
 - Read `.epic/settings.json` for project commands (testCommand, checkCommand, setupCommands)
 - Read the project's testing documentation if it exists for test conventions
 
@@ -202,13 +205,20 @@ Check the team task list (TaskList). Look for tasks that are:
 - Not blocked (`blockedBy` is empty or all blockers are completed)
 - Not owned by another worker
 
-Claim a task by setting yourself as owner: `TaskUpdate(taskId, owner: "{worker_name}", status: "in_progress")`
-
 Prefer tasks in ID order (lowest first) — earlier tasks often set up context for later ones.
 
 If no unblocked tasks are available, send a message to the orchestrator: "No unblocked tasks available, waiting for dependencies." Then idle — you'll be notified when new work is ready.
 
-### 2. Read Task Spec
+### 2. Claim and ACK (MANDATORY — both steps, in order)
+
+**Step A — Claim:** `TaskUpdate(taskId, owner: "{worker_name}", status: "in_progress")`
+
+**Step B — ACK (IMMEDIATELY, before anything else):** Send this message to the orchestrator:
+"ACK task {task_bd_id}: {task_title}. Starting now."
+
+You MUST send the ACK before reading the spec, before entering a worktree, before doing anything else. This is the single most important message you send — it is the orchestrator's only signal that the task was picked up.
+
+### 3. Read Task Spec
 The task description contains the full bd spec. Also read parent context:
 ```bash
 bd show {task_bd_id}
@@ -216,22 +226,18 @@ bd show {task_bd_id} --refs
 ```
 Read any documents listed in Relevant Documentation and Key References.
 
-### 3. Enter Worktree — MANDATORY
+### 4. Enter Worktree — MANDATORY
 
 **You MUST create your own worktree before making ANY changes. This is not optional.**
 
-Multiple workers run in parallel. Without your own worktree, your file edits will collide with other workers. Do NOT skip this step. Do NOT work directly in the current directory.
+Multiple workers run in parallel. Without your own worktree, your file edits will collide with other workers. Do NOT skip this step. Do NOT work directly in the main repo.
 
-```bash
-git branch --show-current    # confirm you're on the milestone branch
-```
-
-Then IMMEDIATELY call:
+IMMEDIATELY call:
 ```
 EnterWorktree(name: "{worker_name}-{task_bd_id}")
 ```
 
-This creates your isolated worktree branched from the milestone branch. ALL your work happens inside this worktree. If you find yourself editing files without having called `EnterWorktree` first, STOP and call it now.
+This creates your isolated worktree branched from the current branch. ALL your work happens inside this worktree. If you find yourself editing files without having called `EnterWorktree` first, STOP and call it now.
 After entering:
 1. Write your heartbeat file:
    ```bash
@@ -241,9 +247,16 @@ After entering:
 
 Do NOT touch .claude/worktrees/ directories that belong to other workers.
 
-### 4. Implement
+### 5. Implement
 
 Implement the task **exactly as specified**. The task spec is your contract — follow it precisely.
+
+**Status Updates During Implementation:**
+Send PROGRESS messages to the orchestrator at these checkpoints:
+- After entering worktree and completing setup: "PROGRESS task {task_bd_id}: worktree ready, starting implementation."
+- After completing each major file or component change (for tasks touching 3+ files)
+- After completing implementation, before running verification: "PROGRESS task {task_bd_id}: implementation complete, running verification."
+- This applies to ALL tasks, not just 3+ point tasks. The orchestrator needs visibility into every worker's status.
 
 **CRITICAL RULES:**
 - Do NOT simplify, shortcut, or find "alternative approaches" to what the spec describes
@@ -251,12 +264,12 @@ Implement the task **exactly as specified**. The task spec is your contract — 
 - Do NOT add compatibility shims, wrappers, or partial migrations instead of doing the real work
 - A task that touches many files is NOT necessarily complex — applying the same pattern across 15 files is routine work, not a reason to deviate
 
-If you believe a task is genuinely impossible as written (not just large — actually impossible), see the NEEDS_DECOMPOSE path in step 8 below. You must NOT silently simplify.
+If you believe a task is genuinely impossible as written (not just large — actually impossible), see the NEEDS_DECOMPOSE path in step 10 below. You must NOT silently simplify.
 
 Only modify files listed in Key References (plus any new files the spec requires).
 If you discover out-of-scope issues, note them but do not fix them.
 
-### 5. Verify (Zero Exceptions Gate)
+### 6. Verify (Zero Exceptions Gate)
 Run the full test suite AND the check command from .epic/settings.json:
 ```bash
 {testCommand}     # ALL tests must pass — zero failures
@@ -267,7 +280,7 @@ If ANY check fails: fix it. Re-run. Repeat until everything passes.
 - Do NOT blame "pre-existing" issues — if it fails now, you fix it now.
 - Do NOT skip checks or defer fixes to a follow-up task.
 
-### 6. Self-Review
+### 7. Self-Review
 Before committing, verify your work against the task spec AND the Definition of Done:
 
 **Task spec check:**
@@ -286,7 +299,7 @@ Before committing, verify your work against the task spec AND the Definition of 
 
 If after honest self-review you cannot complete a criterion, report it as a partial failure in step 8 rather than claiming success.
 
-### 7. Commit Checkpoint
+### 8. Commit Checkpoint
 Ensure all work is committed with a traceable message:
 ```bash
 git add -A
@@ -294,8 +307,8 @@ git commit -m "task({task_bd_id}): {short summary of what was done}"
 ```
 The commit message MUST include the bd task ID. This is your safety net — if ExitWorktree fails, the orchestrator can recover your work by finding this commit.
 
-### 8. Exit Worktree
-Use `ExitWorktree` to merge changes back to the milestone branch.
+### 9. Exit Worktree
+Use `ExitWorktree` to merge changes back to the main branch.
 
 If ExitWorktree fails (e.g., merge conflict):
 1. Read the conflict output carefully
@@ -304,7 +317,7 @@ If ExitWorktree fails (e.g., merge conflict):
 4. Try ExitWorktree again
 5. If it fails a second time, mark the task as failed and message the orchestrator
 
-### 9. Report
+### 10. Report
 After ExitWorktree, update the task and report ONE of these outcomes:
 
 **SUCCESS** — you completed all success criteria and changed all required files:
@@ -326,12 +339,12 @@ Rules for NEEDS_DECOMPOSE:
 Keep task as `in_progress` and message the orchestrator:
 "Failed task {task_bd_id}: {error details}. Worktree branch: {branch_name}."
 
-### 9. Verify Worktree Cleanup
-Confirm you are back on the milestone branch (not in a worktree).
+### 11. Verify Worktree Cleanup
+Confirm you are back on the main branch (not in a worktree).
 If ExitWorktree failed, your worktree is still alive — this MUST be resolved.
 Try ExitWorktree again after fixing any blocking issues.
 
-### 10. Next Task
+### 12. Next Task
 Go back to step 1 (Find Work). Check the task list for newly unblocked tasks.
 Continue until you receive a shutdown message or no work remains.
 
@@ -339,14 +352,22 @@ Continue until you receive a shutdown message or no work remains.
 
 You have structured message types for communicating with the orchestrator. Use the right one — do not improvise free-form messages for situations these protocols cover.
 
-### PROGRESS — heartbeat for long tasks
-For tasks ≥ 3 story points, send a PROGRESS message after completing each major step (e.g., after each file migration, after each test written, after each component updated). This gives the orchestrator visibility into whether you're making progress or stuck.
+### ACK — task claimed confirmation
+**Send this IMMEDIATELY after claiming a task — before reading the spec, before entering a worktree, before doing anything else.** This is the most important message you send. Without it, the orchestrator has no way to know you picked up the task and may assign it to another worker, causing duplicate work.
 
-"PROGRESS task {task_bd_id}: {step_completed} ({N}/{total} if known). Next: {what you're doing next}."
+"ACK task {task_bd_id}: {task_title}. Starting now."
+
+This is mandatory for EVERY task. No exceptions.
+
+### PROGRESS — status updates during work
+Send PROGRESS messages at regular checkpoints throughout your work. This gives the orchestrator visibility into whether you're making progress or stuck. **Send these for ALL tasks, not just large ones.**
+
+Required checkpoints:
+- After worktree setup: "PROGRESS task {task_bd_id}: worktree ready, starting implementation."
+- During implementation (after each major file or step): "PROGRESS task {task_bd_id}: {step_completed} ({N}/{total} if known). Next: {what you're doing next}."
+- Before verification: "PROGRESS task {task_bd_id}: implementation complete, running verification."
 
 Example: "PROGRESS task ydtb-a3f: migrated auth.ts (3/7 files). Next: migrating session.ts."
-
-You do NOT need to send PROGRESS for small tasks (1-2 points) — they should complete quickly enough that the orchestrator doesn't need intermediate updates.
 
 ### BLOCKED — runtime dependency discovered
 During implementation you discover that your task depends on something that doesn't exist yet — a function, schema, config, or API that another task was supposed to create but hasn't been merged.
@@ -388,7 +409,8 @@ Then continue with your task. The orchestrator will triage it.
 
 | Message | When to use | Continue working? | Wait for response? |
 |---------|-------------|-------------------|-------------------|
-| PROGRESS | After each major step on 3+ point tasks | Yes | No |
+| ACK | Immediately after claiming a task — BEFORE any work | Yes — proceed to read spec | No |
+| PROGRESS | After worktree setup, during implementation, before verification | Yes | No |
 | BLOCKED | Can't proceed — runtime dependency missing | No — commit and wait | Yes |
 | CLARIFICATION | Spec is ambiguous or contradictory | No — wait for answer | Yes |
 | DISCOVERED_WORK | Found out-of-scope issue | Yes — continue your task | No |
@@ -442,6 +464,24 @@ Present the wave proposal:
 - If `unattended: false`: ask to launch, modify, or view details
 - If `unattended: true`: auto-proceed (context sufficient: ready tasks exist, verification passed)
 
+### Monitoring Workers
+
+While a wave is in progress, monitor worker activity via the shared activity log:
+
+```bash
+cat .epic/worker-activity.jsonl
+```
+
+This file is automatically updated by PostToolUse hooks — workers don't need to remember to write to it. Each line is a JSON event with `ts`, `worker`, `event`, and `detail` fields. Events include:
+- `enter_worktree` / `exit_worktree` — worker lifecycle
+- `git_commit` — worker committed code (includes message)
+- `test_run` / `check_run` — verification results (includes exit code)
+- `task_closed` — worker closed a bd task
+
+Use this to detect stuck workers (no events for >10 minutes), verify ACK compliance, and track wave progress without relying solely on SendMessage.
+
+Workers are instructed to send an ACK message immediately after claiming a task. If a worker appears stuck without ACKing, it may have stalled — shut it down and spawn a replacement.
+
 ### Wave Transition
 
 When all tasks in a wave are completed (all teammates report done or idle):
@@ -479,7 +519,7 @@ After all tasks in a wave complete:
    bash ~/.claude/bin/worktree-cleanup.sh
    bash ~/.claude/bin/worktree-cleanup.sh --recover   # force-clean any that survived
    ```
-   After both passes, verify with `git worktree list` — only the main repo and orchestrator worktree should remain.
+   After both passes, verify with `git worktree list` — only the main repo should remain.
    Delete `.epic/wave-active.json` after cleanup.
 
 1. **Merge verification**: For each task that reported success, confirm its changes landed on the milestone branch:
@@ -554,9 +594,15 @@ To rotate: send `{type: "shutdown_request"}` to the old worker, then spawn a new
 
 Workers send structured messages during execution. Handle them as they arrive — do not batch.
 
+**On ACK**:
+- Log the acknowledgment: "{worker_name} claimed task {task_bd_id}"
+- Update the team manifest or internal tracking to note which worker owns which task
+- This confirms the worker received and is starting the task — do NOT assign this task to another worker
+- If you don't receive an ACK within ~2 minutes of a task becoming available (and a worker was idle), check on the worker — it may have stalled or exhausted context
+
 **On PROGRESS**:
 - Log the progress update. No response needed.
-- Use these to detect stalls: if a worker hasn't sent a PROGRESS message within ~15 minutes of their last one (or since they claimed the task), send them a check-in: "Status check on task {task_bd_id} — are you still making progress?"
+- Use these to detect stalls: if a worker hasn't sent a PROGRESS or ACK message within ~5 minutes of their last message (or since they were spawned), send them a check-in: "Status check on task {task_bd_id} — are you still making progress?"
 - If the worker doesn't respond to the check-in (goes idle without replying), treat it as a potential stall. Check if their worktree has recent commits. If no commits and no response, the worker likely exhausted context — shut it down and spawn a fresh replacement. Reassign the task.
 
 **On BLOCKED**:
@@ -806,7 +852,7 @@ When all child tasks for the current epic are closed and the review passes:
 2. Wait for all teammates to go idle, then **clean up ALL worker worktrees from this epic**:
    - First, run a normal cleanup: `bash ~/.claude/bin/worktree-cleanup.sh`
    - Then, run with `--recover` to force-clean any remaining dirty worktrees: `bash ~/.claude/bin/worktree-cleanup.sh --recover`
-   - Verify no worker worktrees remain: `git worktree list` — the only worktrees should be the main repo and the orchestrator worktree
+   - Verify no worker worktrees remain: `git worktree list` — only the main repo should remain
    - If any worker worktrees survived both cleanup passes, they have unmerged work — log a warning but proceed (the work was either merged via ExitWorktree or is lost)
    - Delete `.epic/team-active.json`
    - This is critical: leftover worktrees from previous epics accumulate and waste disk space. Clean up EVERY time an epic completes.
@@ -830,7 +876,10 @@ When all child tasks for the current epic are closed and the review passes:
 
 After `/epic-ship` completes (milestone shipped and archived), check for the next milestone in the queue.
 
-1. **Exit current worktree**: Use `ExitWorktree` to merge the orchestrator's milestone branch back to main. The runtime state files (lock, team manifest, wave state) are ephemeral and disappear with the worktree.
+1. **Clean up state files**: Remove `.epic/build-session.lock`, `.epic/team-active.json`, `.epic/wave-active.json` (these are ephemeral build state, not committed).
+   ```bash
+   bash ~/.epicflow/bin/epic-build-setup.sh cleanup
+   ```
 2. Query the queue:
    ```bash
    bd list --type epic --labels "milestone" --status open --json
@@ -841,20 +890,16 @@ After `/epic-ship` completes (milestone shipped and archived), check for the nex
 4. If a ready milestone is found:
    - Check context usage
    - If ≥70% → write handoff: "Next milestone: {title} (bd:{id}). Resume with `/epic-build`."
-   - If <70% → invoke `Skill(skill: "epic-plan")` to capture + decompose the new milestone, which will auto-invoke build. The new build will enter a fresh orchestrator worktree for the new milestone.
+   - If <70% → invoke `Skill(skill: "epic-plan")` to capture + decompose the new milestone, which will auto-invoke build.
 5. If no ready milestones:
    - Send notification: `bash ~/.claude/bin/epic-notify.sh 3 "Queue Empty" "All milestones built. Run /epic-requirements to plan more work."`
    - Report: "All milestones complete. Build queue empty."
 
 ### Parallel Orchestrators
 
-Because each orchestrator runs in its own worktree with ephemeral state files, multiple build orchestrators CAN run simultaneously on different milestones. There is no shared state to collide:
-- Each orchestrator has its own `.epic/build-session.lock` (in its worktree)
-- Each orchestrator creates teams named `epic-{epic_bd_id}` (unique per epic)
-- Workers create worktrees named `worker-{N}-{task_bd_id}` (unique per task)
-- bd operations are scoped to different epics/tasks (no overlap)
-- Git branches are per-milestone (no overlap during build)
-- The only merge point is the PR to main at `/epic-ship` — standard git merge, resolved by the second PR rebasing
+**Not supported.** The orchestrator works from the main repo root with state files in `.epic/`. Only one build runs at a time — the `.epic/build-session.lock` prevents concurrent builds. If a lock file exists when a new build starts, it should report "Build already in progress" and exit.
+
+Workers are isolated via their own worktrees (`worker-{N}-{task_bd_id}`), so concurrent workers within a single build are safe.
 
 ## Discovered Work Triage
 
@@ -1004,7 +1049,8 @@ At every context-insufficient pause point, the orchestrator follows this pattern
 |----------|--------|
 | No active epic | Exit → /epic-plan |
 | No ready tasks, blocked tasks exist | Show blockers (`bd dep tree`), wait for teammates to complete |
-| Teammate sends PROGRESS | Log it. Detect stalls if no PROGRESS for ~15 min on 3+ point tasks |
+| Teammate sends ACK | Log it. Confirms worker claimed the task — do not reassign |
+| Teammate sends PROGRESS | Log it. Detect stalls if no message for ~5 min |
 | Teammate sends BLOCKED | Resolve dependency: find it, reorder tasks, or tell worker to wait |
 | Teammate sends CLARIFICATION | Resolve from docs/code, or pick worker's suggested option (unattended) |
 | Teammate reports NEEDS_DECOMPOSE | Validate request (see Node Repair Strategy 2), accept or reject |
@@ -1019,7 +1065,8 @@ At every context-insufficient pause point, the orchestrator follows this pattern
 | Context usage ≥ 70% (via session-info) | Finish current wave, shutdown team, write handoff, stop |
 | Handoff file exists on startup | Resume from saved state, create new team |
 | All epic tasks done | Review → shutdown team → close epic or start next |
-| Teammate goes idle (no message) | Normal — they're waiting for work. Check task list for unblocked tasks to assign. |
+| Teammate goes idle (no message) | Normal — they're waiting for work. Check task list for unblocked tasks to assign |
+| No ACK after ~2 min | Worker may have stalled. Check on it, potentially rotate |
 
 ---
 
